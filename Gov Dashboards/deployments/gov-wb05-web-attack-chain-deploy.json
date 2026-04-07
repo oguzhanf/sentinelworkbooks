@@ -1,52 +1,62 @@
 {
-  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-  "contentVersion": "1.0.0.0",
-  "parameters": {
-    "workbookDisplayName": {
-      "type": "string",
-      "defaultValue": "Web Application Attack Chain",
-      "metadata": { "description": "The display name of the workbook." }
-    },
-    "workbookId": {
-      "type": "string",
-      "defaultValue": "[newGuid()]",
-      "metadata": { "description": "The unique ID for the workbook." }
-    },
-    "workspaceName": {
-      "type": "string",
-      "metadata": { "description": "The name of the Log Analytics workspace." }
-    },
-    "workspaceResourceGroup": {
-      "type": "string",
-      "defaultValue": "[resourceGroup().name]",
-      "metadata": { "description": "The resource group of the Log Analytics workspace." }
-    },
-    "workspaceSubscription": {
-      "type": "string",
-      "defaultValue": "[subscription().subscriptionId]",
-      "metadata": { "description": "The subscription ID of the Log Analytics workspace." }
-    }
-  },
-  "resources": [
-    {
-      "type": "Microsoft.Insights/workbooks",
-      "apiVersion": "2022-04-01",
-      "name": "[parameters('workbookId')]",
-      "location": "[resourceGroup().location]",
-      "kind": "shared",
-      "properties": {
-        "displayName": "[parameters('workbookDisplayName')]",
-        "serializedData": "{\"version\":\"Notebook/1.0\",\"items\":[{\"type\":1,\"content\":{\"json\":\"# 🕸️ Web Application Attack Chain\\n---\\nCorrelates WAF blocks/allows with web server error responses to detect successful exploitation. A WAF allow followed by application errors from the same IP is a confirmed attack that bypassed WAF rules.\"},\"name\":\"title\"},{\"type\":9,\"content\":{\"version\":\"KqlParameterItem/1.0\",\"parameters\":[{\"id\":\"timeRange\",\"version\":\"KqlParameterItem/1.0\",\"name\":\"TimeRange\",\"type\":4,\"isRequired\":true,\"value\":{\"durationMs\":86400000},\"typeSettings\":{\"selectableValues\":[{\"durationMs\":3600000},{\"durationMs\":86400000},{\"durationMs\":259200000},{\"durationMs\":604800000}],\"allowCustom\":true},\"label\":\"Time Range\"}],\"style\":\"pills\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\"},\"name\":\"parameters\"},{\"type\":1,\"content\":{\"json\":\"## 🛡️ WAF Activity Overview (Fortinet WAF / F5)\"},\"name\":\"waf-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Fortinet\\u0027, \\u0027F5\\u0027) and DeviceProduct has_any (\\u0027WAF\\u0027, \\u0027BIG-IP\\u0027, \\u0027ASM\\u0027, \\u0027FortiWeb\\u0027)\\n| summarize\\n    TotalEvents = count(),\\n    Blocked = countif(DeviceAction in (\\u0027block\\u0027, \\u0027Block\\u0027, \\u0027deny\\u0027, \\u0027Deny\\u0027, \\u0027drop\\u0027, \\u0027Drop\\u0027, \\u0027reset\\u0027, \\u0027Reset\\u0027)),\\n    Allowed = countif(DeviceAction in (\\u0027allow\\u0027, \\u0027Allow\\u0027, \\u0027pass\\u0027, \\u0027Pass\\u0027, \\u0027permit\\u0027, \\u0027Permit\\u0027)),\\n    UniqueAttackIPs = dcount(SourceIP)\\n| project TotalEvents, Blocked, Allowed, UniqueAttackIPs\",\"size\":4,\"title\":\"WAF summary\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"tiles\",\"tileSettings\":{\"showBorder\":true,\"titleContent\":{\"columnMatch\":\"\",\"formatter\":1},\"leftContent\":{\"columnMatch\":\"Blocked\",\"formatter\":12,\"formatOptions\":{\"palette\":\"redBright\"}}}},\"customWidth\":\"100\",\"name\":\"kpi-waf\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Fortinet\\u0027, \\u0027F5\\u0027) and DeviceProduct has_any (\\u0027WAF\\u0027, \\u0027BIG-IP\\u0027, \\u0027ASM\\u0027, \\u0027FortiWeb\\u0027)\\n| summarize AttackCount = count() by Activity\\n| where isnotempty(Activity)\\n| sort by AttackCount desc\\n| take 15\",\"size\":0,\"title\":\"Top WAF attack signatures detected\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"AttackCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":1000}}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-waf-attacks\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Fortinet\\u0027, \\u0027F5\\u0027) and DeviceProduct has_any (\\u0027WAF\\u0027, \\u0027BIG-IP\\u0027, \\u0027ASM\\u0027, \\u0027FortiWeb\\u0027)\\n| summarize AttackCount = count() by SourceIP\\n| sort by AttackCount desc\\n| take 15\",\"size\":0,\"title\":\"Top attacker IPs\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"AttackCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":1000}}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-waf-ips\"},{\"type\":1,\"content\":{\"json\":\"## 🔴 WAF Allow → App Server Error (Successful Bypass)\"},\"name\":\"bypass-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"let WAFAllowed = CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Fortinet\\u0027, \\u0027F5\\u0027) and DeviceProduct has_any (\\u0027WAF\\u0027, \\u0027BIG-IP\\u0027, \\u0027ASM\\u0027, \\u0027FortiWeb\\u0027)\\n| where DeviceAction in (\\u0027allow\\u0027, \\u0027Allow\\u0027, \\u0027pass\\u0027, \\u0027Pass\\u0027, \\u0027permit\\u0027, \\u0027Permit\\u0027)\\n| where isnotempty(SourceIP)\\n| summarize WAFAllowCount = count(), AllowedURI = make_set(RequestURL, 5) by SourceIP;\\nlet AppErrors = W3CIISLog\\n| where scStatus startswith \\u00275\\u0027\\n| where isnotempty(cIP)\\n| summarize ServerErrors = count(), ErrorURIs = make_set(csUriStem, 5) by cIP;\\nWAFAllowed\\n| join kind=inner (AppErrors | project SourceIP = cIP, ServerErrors, ErrorURIs) on SourceIP\\n| project SourceIP, WAFAllowCount, AllowedURI, ServerErrors, ErrorURIs\\n| sort by ServerErrors desc\",\"size\":0,\"title\":\"IPs allowed by WAF that triggered server-side errors — potential successful exploitation\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"WAFAllowCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"blue\",\"max\":1000}},{\"columnMatch\":\"ServerErrors\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":200}}],\"filter\":true}},\"customWidth\":\"100\",\"name\":\"table-waf-bypass\"},{\"type\":1,\"content\":{\"json\":\"## 📋 Web Server Error Analysis (IIS + Syslog Apache/Nginx)\"},\"name\":\"webserver-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"W3CIISLog\\n| where scStatus startswith \\u00274\\u0027 or scStatus startswith \\u00275\\u0027\\n| summarize ErrorCount = count() by scStatus, csUriStem\\n| sort by ErrorCount desc\\n| take 20\",\"size\":0,\"title\":\"IIS error codes and affected URIs\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"ErrorCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":1000}}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-iis-errors\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"Syslog\\n| where ProcessName in (\\u0027apache2\\u0027, \\u0027httpd\\u0027, \\u0027nginx\\u0027, \\u0027apache\\u0027)\\n| where SyslogMessage has_any (\\u0027error\\u0027, \\u0027critical\\u0027, \\u0027alert\\u0027, \\u0027emerg\\u0027, \\u0027SQL\\u0027, \\u0027injection\\u0027, \\u0027XSS\\u0027, \\u0027traversal\\u0027, \\u0027exec\\u0027)\\n| project TimeGenerated, HostName, ProcessName, SyslogMessage\\n| sort by TimeGenerated desc\\n| take 50\",\"size\":0,\"title\":\"Apache/Nginx error and attack log entries\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-apache-errors\"}],\"styleSettings\":{},\"$schema\":\"https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json\"}",
-        "version": "1.0",
-        "sourceId": "[resourceId(parameters('workspaceSubscription'), parameters('workspaceResourceGroup'), 'Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]",
-        "category": "sentinel"
-      }
-    }
-  ],
-  "outputs": {
-    "workbookId": {
-      "type": "string",
-      "value": "[resourceId('Microsoft.Insights/workbooks', parameters('workbookId'))]"
-    }
-  }
+    "$schema":  "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion":  "1.0.0.0",
+    "parameters":  {
+                       "workbookDisplayName":  {
+                                                   "type":  "string",
+                                                   "defaultValue":  "GOV - Web Application Attack Chain",
+                                                   "metadata":  {
+                                                                    "description":  "The display name of the workbook."
+                                                                }
+                                               },
+                       "workbookId":  {
+                                          "type":  "string",
+                                          "defaultValue":  "[newGuid()]",
+                                          "metadata":  {
+                                                           "description":  "The unique ID for the workbook."
+                                                       }
+                                      },
+                       "workspaceName":  {
+                                             "type":  "string",
+                                             "metadata":  {
+                                                              "description":  "The name of the Log Analytics workspace."
+                                                          }
+                                         },
+                       "workspaceResourceGroup":  {
+                                                      "type":  "string",
+                                                      "defaultValue":  "[resourceGroup().name]",
+                                                      "metadata":  {
+                                                                       "description":  "The resource group of the Log Analytics workspace."
+                                                                   }
+                                                  },
+                       "workspaceSubscription":  {
+                                                     "type":  "string",
+                                                     "defaultValue":  "[subscription().subscriptionId]",
+                                                     "metadata":  {
+                                                                      "description":  "The subscription ID of the Log Analytics workspace."
+                                                                  }
+                                                 }
+                   },
+    "resources":  [
+                      {
+                          "type":  "Microsoft.Insights/workbooks",
+                          "apiVersion":  "2022-04-01",
+                          "name":  "[parameters(\u0027workbookId\u0027)]",
+                          "location":  "[resourceGroup().location]",
+                          "kind":  "shared",
+                          "properties":  {
+                                             "displayName":  "[parameters(\u0027workbookDisplayName\u0027)]",
+                                             "serializedData":  "{\"version\":\"Notebook/1.0\",\"items\":[{\"type\":1,\"content\":{\"json\":\"# 🕸️ Web Application Attack Chain\\n---\\nCorrelates WAF blocks/allows with web server error responses to detect successful exploitation. A WAF allow followed by application errors from the same IP is a confirmed attack that bypassed WAF rules.\"},\"name\":\"title\"},{\"type\":9,\"content\":{\"version\":\"KqlParameterItem/1.0\",\"parameters\":[{\"id\":\"timeRange\",\"version\":\"KqlParameterItem/1.0\",\"name\":\"TimeRange\",\"type\":4,\"isRequired\":true,\"value\":{\"durationMs\":86400000},\"typeSettings\":{\"selectableValues\":[{\"durationMs\":3600000},{\"durationMs\":86400000},{\"durationMs\":259200000},{\"durationMs\":604800000}],\"allowCustom\":true},\"label\":\"Time Range\"}],\"style\":\"pills\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\"},\"name\":\"parameters\"},{\"type\":1,\"content\":{\"json\":\"## 🛡️ WAF Activity Overview (Fortinet WAF / F5)\"},\"name\":\"waf-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Fortinet\\u0027, \\u0027F5\\u0027) and DeviceProduct has_any (\\u0027WAF\\u0027, \\u0027BIG-IP\\u0027, \\u0027ASM\\u0027, \\u0027FortiWeb\\u0027)\\n| summarize\\n    TotalEvents = count(),\\n    Blocked = countif(DeviceAction in (\\u0027block\\u0027, \\u0027Block\\u0027, \\u0027deny\\u0027, \\u0027Deny\\u0027, \\u0027drop\\u0027, \\u0027Drop\\u0027, \\u0027reset\\u0027, \\u0027Reset\\u0027)),\\n    Allowed = countif(DeviceAction in (\\u0027allow\\u0027, \\u0027Allow\\u0027, \\u0027pass\\u0027, \\u0027Pass\\u0027, \\u0027permit\\u0027, \\u0027Permit\\u0027)),\\n    UniqueAttackIPs = dcount(SourceIP)\\n| project TotalEvents, Blocked, Allowed, UniqueAttackIPs\",\"size\":4,\"title\":\"WAF summary\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"tiles\",\"tileSettings\":{\"showBorder\":true,\"titleContent\":{\"columnMatch\":\"\",\"formatter\":1},\"leftContent\":{\"columnMatch\":\"Blocked\",\"formatter\":12,\"formatOptions\":{\"palette\":\"redBright\"}}}},\"customWidth\":\"100\",\"name\":\"kpi-waf\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Fortinet\\u0027, \\u0027F5\\u0027) and DeviceProduct has_any (\\u0027WAF\\u0027, \\u0027BIG-IP\\u0027, \\u0027ASM\\u0027, \\u0027FortiWeb\\u0027)\\n| summarize AttackCount = count() by Activity\\n| where isnotempty(Activity)\\n| sort by AttackCount desc\\n| take 15\",\"size\":0,\"title\":\"Top WAF attack signatures detected\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"AttackCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":1000}}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-waf-attacks\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Fortinet\\u0027, \\u0027F5\\u0027) and DeviceProduct has_any (\\u0027WAF\\u0027, \\u0027BIG-IP\\u0027, \\u0027ASM\\u0027, \\u0027FortiWeb\\u0027)\\n| summarize AttackCount = count() by SourceIP\\n| sort by AttackCount desc\\n| take 15\",\"size\":0,\"title\":\"Top attacker IPs\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"AttackCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":1000}}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-waf-ips\"},{\"type\":1,\"content\":{\"json\":\"## 🔴 WAF Allow → App Server Error (Successful Bypass)\"},\"name\":\"bypass-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"let WAFAllowed = CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Fortinet\\u0027, \\u0027F5\\u0027) and DeviceProduct has_any (\\u0027WAF\\u0027, \\u0027BIG-IP\\u0027, \\u0027ASM\\u0027, \\u0027FortiWeb\\u0027)\\n| where DeviceAction in (\\u0027allow\\u0027, \\u0027Allow\\u0027, \\u0027pass\\u0027, \\u0027Pass\\u0027, \\u0027permit\\u0027, \\u0027Permit\\u0027)\\n| where isnotempty(SourceIP)\\n| summarize WAFAllowCount = count(), AllowedURI = make_set(RequestURL, 5) by SourceIP;\\nlet AppErrors = W3CIISLog\\n| where scStatus startswith \\u00275\\u0027\\n| where isnotempty(cIP)\\n| summarize ServerErrors = count(), ErrorURIs = make_set(csUriStem, 5) by cIP;\\nWAFAllowed\\n| join kind=inner (AppErrors | project SourceIP = cIP, ServerErrors, ErrorURIs) on SourceIP\\n| project SourceIP, WAFAllowCount, AllowedURI, ServerErrors, ErrorURIs\\n| sort by ServerErrors desc\",\"size\":0,\"title\":\"IPs allowed by WAF that triggered server-side errors — potential successful exploitation\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"WAFAllowCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"blue\",\"max\":1000}},{\"columnMatch\":\"ServerErrors\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":200}}],\"filter\":true}},\"customWidth\":\"100\",\"name\":\"table-waf-bypass\"},{\"type\":1,\"content\":{\"json\":\"## 📋 Web Server Error Analysis (IIS + Syslog Apache/Nginx)\"},\"name\":\"webserver-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"W3CIISLog\\n| where scStatus startswith \\u00274\\u0027 or scStatus startswith \\u00275\\u0027\\n| summarize ErrorCount = count() by scStatus, csUriStem\\n| sort by ErrorCount desc\\n| take 20\",\"size\":0,\"title\":\"IIS error codes and affected URIs\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"ErrorCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":1000}}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-iis-errors\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"Syslog\\n| where ProcessName in (\\u0027apache2\\u0027, \\u0027httpd\\u0027, \\u0027nginx\\u0027, \\u0027apache\\u0027)\\n| where SyslogMessage has_any (\\u0027error\\u0027, \\u0027critical\\u0027, \\u0027alert\\u0027, \\u0027emerg\\u0027, \\u0027SQL\\u0027, \\u0027injection\\u0027, \\u0027XSS\\u0027, \\u0027traversal\\u0027, \\u0027exec\\u0027)\\n| project TimeGenerated, HostName, ProcessName, SyslogMessage\\n| sort by TimeGenerated desc\\n| take 50\",\"size\":0,\"title\":\"Apache/Nginx error and attack log entries\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-apache-errors\"}],\"styleSettings\":{},\"$schema\":\"https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json\"}",
+                                             "version":  "1.0",
+                                             "sourceId":  "[resourceId(parameters(\u0027workspaceSubscription\u0027), parameters(\u0027workspaceResourceGroup\u0027), \u0027Microsoft.OperationalInsights/workspaces\u0027, parameters(\u0027workspaceName\u0027))]",
+                                             "category":  "sentinel"
+                                         }
+                      }
+                  ],
+    "outputs":  {
+                    "workbookId":  {
+                                       "type":  "string",
+                                       "value":  "[resourceId(\u0027Microsoft.Insights/workbooks\u0027, parameters(\u0027workbookId\u0027))]"
+                                   }
+                }
 }

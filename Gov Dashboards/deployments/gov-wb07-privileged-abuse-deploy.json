@@ -1,52 +1,62 @@
 {
-  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-  "contentVersion": "1.0.0.0",
-  "parameters": {
-    "workbookDisplayName": {
-      "type": "string",
-      "defaultValue": "Privileged Account Abuse",
-      "metadata": { "description": "The display name of the workbook." }
-    },
-    "workbookId": {
-      "type": "string",
-      "defaultValue": "[newGuid()]",
-      "metadata": { "description": "The unique ID for the workbook." }
-    },
-    "workspaceName": {
-      "type": "string",
-      "metadata": { "description": "The name of the Log Analytics workspace." }
-    },
-    "workspaceResourceGroup": {
-      "type": "string",
-      "defaultValue": "[resourceGroup().name]",
-      "metadata": { "description": "The resource group of the Log Analytics workspace." }
-    },
-    "workspaceSubscription": {
-      "type": "string",
-      "defaultValue": "[subscription().subscriptionId]",
-      "metadata": { "description": "The subscription ID of the Log Analytics workspace." }
-    }
-  },
-  "resources": [
-    {
-      "type": "Microsoft.Insights/workbooks",
-      "apiVersion": "2022-04-01",
-      "name": "[parameters('workbookId')]",
-      "location": "[resourceGroup().location]",
-      "kind": "shared",
-      "properties": {
-        "displayName": "[parameters('workbookDisplayName')]",
-        "serializedData": "{\"version\":\"Notebook/1.0\",\"items\":[{\"type\":1,\"content\":{\"json\":\"# 👑 Privileged Account Abuse Across Systems\\n---\\nAn account touching Windows servers, Unix servers, network infrastructure, and Azure in a 30-minute window is either a breach or a misconfiguration. Correlates admin activity across SecurityEvent, Syslog, CommonSecurityLog, and AuditLogs.\"},\"name\":\"title\"},{\"type\":9,\"content\":{\"version\":\"KqlParameterItem/1.0\",\"parameters\":[{\"id\":\"timeRange\",\"version\":\"KqlParameterItem/1.0\",\"name\":\"TimeRange\",\"type\":4,\"isRequired\":true,\"value\":{\"durationMs\":86400000},\"typeSettings\":{\"selectableValues\":[{\"durationMs\":3600000},{\"durationMs\":86400000},{\"durationMs\":259200000},{\"durationMs\":604800000}],\"allowCustom\":true},\"label\":\"Time Range\"}],\"style\":\"pills\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\"},\"name\":\"parameters\"},{\"type\":1,\"content\":{\"json\":\"## 🔑 Windows Privileged Activity\"},\"name\":\"win-priv-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"SecurityEvent\\n| where EventID in (4728, 4732, 4756, 4720, 4726, 4648, 4672)\\n| extend EventDescription = case(\\n    EventID == 4728, \\u0027Member added to global group\\u0027,\\n    EventID == 4732, \\u0027Member added to local admin group\\u0027,\\n    EventID == 4756, \\u0027Member added to universal group\\u0027,\\n    EventID == 4720, \\u0027New account created\\u0027,\\n    EventID == 4726, \\u0027Account deleted\\u0027,\\n    EventID == 4648, \\u0027Explicit credentials used\\u0027,\\n    EventID == 4672, \\u0027Special privileges assigned\\u0027,\\n    \\u0027Other\\u0027\\n)\\n| project TimeGenerated, EventID, EventDescription, SubjectUserName, TargetUserName, Computer\\n| sort by TimeGenerated desc\\n| take 50\",\"size\":0,\"title\":\"Windows privileged operations — group changes, new accounts, explicit credentials\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"60\",\"name\":\"table-win-priv\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"SecurityEvent\\n| where EventID == 4672\\n| summarize Count = count() by SubjectUserName\\n| sort by Count desc\\n| take 15\",\"size\":0,\"title\":\"Accounts with most special privilege assignments\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"Count\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":100}}],\"filter\":true}},\"customWidth\":\"40\",\"name\":\"table-special-priv\"},{\"type\":1,\"content\":{\"json\":\"## 🐧 Unix Root / Sudo Activity\"},\"name\":\"unix-priv-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"Syslog\\n| where Facility == \\u0027authpriv\\u0027\\n| where SyslogMessage has_any (\\u0027sudo:\\u0027, \\u0027su:\\u0027, \\u0027root\\u0027, \\u0027COMMAND=\\u0027, \\u0027session opened for user root\\u0027)\\n| project TimeGenerated, HostName, HostIP, SyslogMessage\\n| sort by TimeGenerated desc\\n| take 50\",\"size\":0,\"title\":\"Unix sudo / su / root session activity\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"60\",\"name\":\"table-unix-root\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"Syslog\\n| where Facility == \\u0027authpriv\\u0027\\n| where SyslogMessage has \\u0027COMMAND=\\u0027\\n| extend SudoUser = extract(@\\u0027(\\\\S+) : TTY\\u0027, 1, SyslogMessage)\\n| summarize SudoCount = count() by HostName, SudoUser\\n| where SudoCount \\u003e 5\\n| sort by SudoCount desc\",\"size\":0,\"title\":\"Accounts with high sudo command count\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"SudoCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":50}}],\"filter\":true}},\"customWidth\":\"40\",\"name\":\"table-sudo-count\"},{\"type\":1,\"content\":{\"json\":\"## 🔗 Cross-System Admin Activity — Same Account, Multiple Layers\"},\"name\":\"cross-priv-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"let WinAdmins = SecurityEvent\\n| where EventID in (4672, 4728, 4732, 4648)\\n| where isnotempty(SubjectUserName) and SubjectUserName !has \\u0027$\\u0027\\n| summarize WinPrivEvents = count() by AccountName = tolower(SubjectUserName);\\nlet EntraAdmins = AuditLogs\\n| where OperationName in (\\u0027Add member to role\\u0027, \\u0027Add application\\u0027, \\u0027Delete user\\u0027, \\u0027Reset user password\\u0027)\\n| extend Actor = tolower(tostring(parse_json(tostring(InitiatedBy)).user.userPrincipalName))\\n| where isnotempty(Actor)\\n| summarize EntraPrivEvents = count() by AccountName = Actor;\\nWinAdmins\\n| join kind=inner EntraAdmins on AccountName\\n| project AccountName, WinPrivEvents, EntraPrivEvents\\n| extend TotalPrivEvents = WinPrivEvents + EntraPrivEvents\\n| sort by TotalPrivEvents desc\",\"size\":0,\"title\":\"Accounts with privileged activity on BOTH Windows and Entra — high-privilege accounts to monitor\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"WinPrivEvents\",\"formatter\":4,\"formatOptions\":{\"palette\":\"blue\",\"max\":100}},{\"columnMatch\":\"EntraPrivEvents\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":100}},{\"columnMatch\":\"TotalPrivEvents\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":200}}],\"filter\":true}},\"customWidth\":\"60\",\"name\":\"table-cross-priv\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor == \\u0027Cisco\\u0027 and DeviceProduct has \\u0027ISE\\u0027\\n| where SourceUserName has_any (\\u0027admin\\u0027, \\u0027root\\u0027, \\u0027administrator\\u0027, \\u0027superuser\\u0027, \\u0027sysadmin\\u0027)\\n| project TimeGenerated, SourceUserName, SourceIP, DeviceAction, Activity\\n| sort by TimeGenerated desc\\n| take 30\",\"size\":0,\"title\":\"Privileged account NAC/ISE authentications\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"40\",\"name\":\"table-ise-priv\"}],\"styleSettings\":{},\"$schema\":\"https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json\"}",
-        "version": "1.0",
-        "sourceId": "[resourceId(parameters('workspaceSubscription'), parameters('workspaceResourceGroup'), 'Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]",
-        "category": "sentinel"
-      }
-    }
-  ],
-  "outputs": {
-    "workbookId": {
-      "type": "string",
-      "value": "[resourceId('Microsoft.Insights/workbooks', parameters('workbookId'))]"
-    }
-  }
+    "$schema":  "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion":  "1.0.0.0",
+    "parameters":  {
+                       "workbookDisplayName":  {
+                                                   "type":  "string",
+                                                   "defaultValue":  "GOV - Privileged Account Abuse",
+                                                   "metadata":  {
+                                                                    "description":  "The display name of the workbook."
+                                                                }
+                                               },
+                       "workbookId":  {
+                                          "type":  "string",
+                                          "defaultValue":  "[newGuid()]",
+                                          "metadata":  {
+                                                           "description":  "The unique ID for the workbook."
+                                                       }
+                                      },
+                       "workspaceName":  {
+                                             "type":  "string",
+                                             "metadata":  {
+                                                              "description":  "The name of the Log Analytics workspace."
+                                                          }
+                                         },
+                       "workspaceResourceGroup":  {
+                                                      "type":  "string",
+                                                      "defaultValue":  "[resourceGroup().name]",
+                                                      "metadata":  {
+                                                                       "description":  "The resource group of the Log Analytics workspace."
+                                                                   }
+                                                  },
+                       "workspaceSubscription":  {
+                                                     "type":  "string",
+                                                     "defaultValue":  "[subscription().subscriptionId]",
+                                                     "metadata":  {
+                                                                      "description":  "The subscription ID of the Log Analytics workspace."
+                                                                  }
+                                                 }
+                   },
+    "resources":  [
+                      {
+                          "type":  "Microsoft.Insights/workbooks",
+                          "apiVersion":  "2022-04-01",
+                          "name":  "[parameters(\u0027workbookId\u0027)]",
+                          "location":  "[resourceGroup().location]",
+                          "kind":  "shared",
+                          "properties":  {
+                                             "displayName":  "[parameters(\u0027workbookDisplayName\u0027)]",
+                                             "serializedData":  "{\"version\":\"Notebook/1.0\",\"items\":[{\"type\":1,\"content\":{\"json\":\"# 👑 Privileged Account Abuse Across Systems\\n---\\nAn account touching Windows servers, Unix servers, network infrastructure, and Azure in a 30-minute window is either a breach or a misconfiguration. Correlates admin activity across SecurityEvent, Syslog, CommonSecurityLog, and AuditLogs.\"},\"name\":\"title\"},{\"type\":9,\"content\":{\"version\":\"KqlParameterItem/1.0\",\"parameters\":[{\"id\":\"timeRange\",\"version\":\"KqlParameterItem/1.0\",\"name\":\"TimeRange\",\"type\":4,\"isRequired\":true,\"value\":{\"durationMs\":86400000},\"typeSettings\":{\"selectableValues\":[{\"durationMs\":3600000},{\"durationMs\":86400000},{\"durationMs\":259200000},{\"durationMs\":604800000}],\"allowCustom\":true},\"label\":\"Time Range\"}],\"style\":\"pills\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\"},\"name\":\"parameters\"},{\"type\":1,\"content\":{\"json\":\"## 🔑 Windows Privileged Activity\"},\"name\":\"win-priv-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"SecurityEvent\\n| where EventID in (4728, 4732, 4756, 4720, 4726, 4648, 4672)\\n| extend EventDescription = case(\\n    EventID == 4728, \\u0027Member added to global group\\u0027,\\n    EventID == 4732, \\u0027Member added to local admin group\\u0027,\\n    EventID == 4756, \\u0027Member added to universal group\\u0027,\\n    EventID == 4720, \\u0027New account created\\u0027,\\n    EventID == 4726, \\u0027Account deleted\\u0027,\\n    EventID == 4648, \\u0027Explicit credentials used\\u0027,\\n    EventID == 4672, \\u0027Special privileges assigned\\u0027,\\n    \\u0027Other\\u0027\\n)\\n| project TimeGenerated, EventID, EventDescription, SubjectUserName, TargetUserName, Computer\\n| sort by TimeGenerated desc\\n| take 50\",\"size\":0,\"title\":\"Windows privileged operations — group changes, new accounts, explicit credentials\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"60\",\"name\":\"table-win-priv\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"SecurityEvent\\n| where EventID == 4672\\n| summarize Count = count() by SubjectUserName\\n| sort by Count desc\\n| take 15\",\"size\":0,\"title\":\"Accounts with most special privilege assignments\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"Count\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":100}}],\"filter\":true}},\"customWidth\":\"40\",\"name\":\"table-special-priv\"},{\"type\":1,\"content\":{\"json\":\"## 🐧 Unix Root / Sudo Activity\"},\"name\":\"unix-priv-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"Syslog\\n| where Facility == \\u0027authpriv\\u0027\\n| where SyslogMessage has_any (\\u0027sudo:\\u0027, \\u0027su:\\u0027, \\u0027root\\u0027, \\u0027COMMAND=\\u0027, \\u0027session opened for user root\\u0027)\\n| project TimeGenerated, HostName, HostIP, SyslogMessage\\n| sort by TimeGenerated desc\\n| take 50\",\"size\":0,\"title\":\"Unix sudo / su / root session activity\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"60\",\"name\":\"table-unix-root\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"Syslog\\n| where Facility == \\u0027authpriv\\u0027\\n| where SyslogMessage has \\u0027COMMAND=\\u0027\\n| extend SudoUser = extract(@\\u0027(\\\\S+) : TTY\\u0027, 1, SyslogMessage)\\n| summarize SudoCount = count() by HostName, SudoUser\\n| where SudoCount \\u003e 5\\n| sort by SudoCount desc\",\"size\":0,\"title\":\"Accounts with high sudo command count\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"SudoCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":50}}],\"filter\":true}},\"customWidth\":\"40\",\"name\":\"table-sudo-count\"},{\"type\":1,\"content\":{\"json\":\"## 🔗 Cross-System Admin Activity — Same Account, Multiple Layers\"},\"name\":\"cross-priv-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"let WinAdmins = SecurityEvent\\n| where EventID in (4672, 4728, 4732, 4648)\\n| where isnotempty(SubjectUserName) and SubjectUserName !has \\u0027$\\u0027\\n| summarize WinPrivEvents = count() by AccountName = tolower(SubjectUserName);\\nlet EntraAdmins = AuditLogs\\n| where OperationName in (\\u0027Add member to role\\u0027, \\u0027Add application\\u0027, \\u0027Delete user\\u0027, \\u0027Reset user password\\u0027)\\n| extend Actor = tolower(tostring(parse_json(tostring(InitiatedBy)).user.userPrincipalName))\\n| where isnotempty(Actor)\\n| summarize EntraPrivEvents = count() by AccountName = Actor;\\nWinAdmins\\n| join kind=inner EntraAdmins on AccountName\\n| project AccountName, WinPrivEvents, EntraPrivEvents\\n| extend TotalPrivEvents = WinPrivEvents + EntraPrivEvents\\n| sort by TotalPrivEvents desc\",\"size\":0,\"title\":\"Accounts with privileged activity on BOTH Windows and Entra — high-privilege accounts to monitor\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"WinPrivEvents\",\"formatter\":4,\"formatOptions\":{\"palette\":\"blue\",\"max\":100}},{\"columnMatch\":\"EntraPrivEvents\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":100}},{\"columnMatch\":\"TotalPrivEvents\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":200}}],\"filter\":true}},\"customWidth\":\"60\",\"name\":\"table-cross-priv\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor == \\u0027Cisco\\u0027 and DeviceProduct has \\u0027ISE\\u0027\\n| where SourceUserName has_any (\\u0027admin\\u0027, \\u0027root\\u0027, \\u0027administrator\\u0027, \\u0027superuser\\u0027, \\u0027sysadmin\\u0027)\\n| project TimeGenerated, SourceUserName, SourceIP, DeviceAction, Activity\\n| sort by TimeGenerated desc\\n| take 30\",\"size\":0,\"title\":\"Privileged account NAC/ISE authentications\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"40\",\"name\":\"table-ise-priv\"}],\"styleSettings\":{},\"$schema\":\"https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json\"}",
+                                             "version":  "1.0",
+                                             "sourceId":  "[resourceId(parameters(\u0027workspaceSubscription\u0027), parameters(\u0027workspaceResourceGroup\u0027), \u0027Microsoft.OperationalInsights/workspaces\u0027, parameters(\u0027workspaceName\u0027))]",
+                                             "category":  "sentinel"
+                                         }
+                      }
+                  ],
+    "outputs":  {
+                    "workbookId":  {
+                                       "type":  "string",
+                                       "value":  "[resourceId(\u0027Microsoft.Insights/workbooks\u0027, parameters(\u0027workbookId\u0027))]"
+                                   }
+                }
 }

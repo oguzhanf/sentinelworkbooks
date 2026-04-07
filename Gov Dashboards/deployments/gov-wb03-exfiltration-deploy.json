@@ -1,52 +1,62 @@
 {
-  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-  "contentVersion": "1.0.0.0",
-  "parameters": {
-    "workbookDisplayName": {
-      "type": "string",
-      "defaultValue": "Data Exfiltration Across Layers",
-      "metadata": { "description": "The display name of the workbook." }
-    },
-    "workbookId": {
-      "type": "string",
-      "defaultValue": "[newGuid()]",
-      "metadata": { "description": "The unique ID for the workbook." }
-    },
-    "workspaceName": {
-      "type": "string",
-      "metadata": { "description": "The name of the Log Analytics workspace." }
-    },
-    "workspaceResourceGroup": {
-      "type": "string",
-      "defaultValue": "[resourceGroup().name]",
-      "metadata": { "description": "The resource group of the Log Analytics workspace." }
-    },
-    "workspaceSubscription": {
-      "type": "string",
-      "defaultValue": "[subscription().subscriptionId]",
-      "metadata": { "description": "The subscription ID of the Log Analytics workspace." }
-    }
-  },
-  "resources": [
-    {
-      "type": "Microsoft.Insights/workbooks",
-      "apiVersion": "2022-04-01",
-      "name": "[parameters('workbookId')]",
-      "location": "[resourceGroup().location]",
-      "kind": "shared",
-      "properties": {
-        "displayName": "[parameters('workbookDisplayName')]",
-        "serializedData": "{\"version\":\"Notebook/1.0\",\"items\":[{\"type\":1,\"content\":{\"json\":\"# 📤 Data Exfiltration Across Layers\\n---\\nDetects data leaving the organisation by correlating outbound proxy volume (Squid), large IIS responses, Entra audit anomalies, and Unix file access spikes. Any user appearing across multiple layers with unusual volume in the same time window is a high-confidence exfiltration signal.\"},\"name\":\"title\"},{\"type\":9,\"content\":{\"version\":\"KqlParameterItem/1.0\",\"parameters\":[{\"id\":\"timeRange\",\"version\":\"KqlParameterItem/1.0\",\"name\":\"TimeRange\",\"type\":4,\"isRequired\":true,\"value\":{\"durationMs\":604800000},\"typeSettings\":{\"selectableValues\":[{\"durationMs\":86400000},{\"durationMs\":259200000},{\"durationMs\":604800000},{\"durationMs\":2592000000}],\"allowCustom\":true},\"label\":\"Time Range\"}],\"style\":\"pills\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\"},\"name\":\"parameters\"},{\"type\":1,\"content\":{\"json\":\"## 🌐 Proxy Outbound Volume (Squid)\"},\"name\":\"proxy-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Squid\\u0027, \\u0027squid\\u0027)\\n| where isnotempty(SourceUserName)\\n| summarize OutboundBytes = sum(SentBytes), RequestCount = count(), UniqueDestinations = dcount(DestinationHostName)\\n    by UserId = SourceUserName\\n| where OutboundBytes \\u003e 104857600\\n| sort by OutboundBytes desc\\n| take 20\\n| extend OutboundMB = round(todouble(OutboundBytes) / 1048576, 1)\",\"size\":0,\"title\":\"Users with high proxy outbound volume (\\u003e100MB)\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"OutboundMB\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":1000}},{\"columnMatch\":\"UniqueDestinations\",\"formatter\":4,\"formatOptions\":{\"palette\":\"blue\",\"max\":100}}],\"filter\":true,\"sortBy\":[{\"itemKey\":\"OutboundMB\",\"sortOrder\":2}]}},\"customWidth\":\"50\",\"name\":\"table-proxy-volume\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Squid\\u0027, \\u0027squid\\u0027)\\n| where DestinationHostName has_any (\\u0027pastebin.com\\u0027, \\u0027paste.ee\\u0027, \\u0027mega.nz\\u0027, \\u0027anonfiles.com\\u0027, \\u0027transfer.sh\\u0027, \\u0027wetransfer.com\\u0027, \\u0027sendspace.com\\u0027, \\u0027dropbox.com\\u0027, \\u0027drive.google.com\\u0027, \\u0027onedrive.live.com\\u0027)\\n| project TimeGenerated, SourceUserName, SourceIP, DestinationHostName, RequestURL, SentBytes\\n| sort by TimeGenerated desc\\n| take 50\",\"size\":0,\"title\":\"Proxy requests to file sharing / paste sites\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-proxy-suspicious\"},{\"type\":1,\"content\":{\"json\":\"## 🌐 Large Web Server Responses (IIS)\"},\"name\":\"iis-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"W3CIISLog\\n| where isnotempty(cIP)\\n| where scBytes \\u003e 10485760\\n| project TimeGenerated, cIP, csMethod, csUriStem, scStatus, scBytes, csUserName, Computer\\n| extend ResponseMB = round(todouble(scBytes) / 1048576, 1)\\n| sort by scBytes desc\\n| take 50\",\"size\":0,\"title\":\"IIS responses \\u003e 10MB — large data transfers from web servers\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"ResponseMB\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":500}},{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"100\",\"name\":\"table-iis-large\"},{\"type\":1,\"content\":{\"json\":\"## 🔗 Cross-Layer Exfiltration Signal — Proxy + IIS + Unix\"},\"name\":\"correlation-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"let ProxyHeavyUsers = CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Squid\\u0027, \\u0027squid\\u0027)\\n| where isnotempty(SourceUserName)\\n| summarize ProxyBytes = sum(SentBytes) by UserId = tolower(SourceUserName)\\n| where ProxyBytes \\u003e 52428800;\\nlet LargeIISClients = W3CIISLog\\n| where scBytes \\u003e 5242880\\n| where isnotempty(cIP)\\n| summarize IISBytes = sum(scBytes), IISRequests = count() by cIP;\\nlet UnixFileCopy = Syslog\\n| where SyslogMessage has_any (\\u0027cp \\u0027, \\u0027scp \\u0027, \\u0027rsync\\u0027, \\u0027tar \\u0027, \\u0027sftp\\u0027, \\u0027ftp \\u0027)\\n| where isnotempty(HostIP)\\n| summarize UnixCopyEvents = count() by HostIP;\\nlet EntraExport = AuditLogs\\n| where OperationName in (\\u0027Export\\u0027, \\u0027Download user\\u0027, \\u0027Download report\\u0027, \\u0027Sync started\\u0027)\\n| summarize EntraExports = count()\\n    by UserId = tolower(tostring(parse_json(tostring(InitiatedBy)).user.userPrincipalName));\\nProxyHeavyUsers\\n| join kind=leftouter (EntraExport) on UserId\\n| project UserId, ProxyMB = round(todouble(ProxyBytes)/1048576, 1), EntraExports = coalesce(EntraExports, 0)\\n| where ProxyMB \\u003e 50 or EntraExports \\u003e 0\\n| sort by ProxyMB desc\",\"size\":0,\"title\":\"Multi-layer exfiltration signal — users with high proxy outbound AND Entra export activity\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"ProxyMB\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":1000}},{\"columnMatch\":\"EntraExports\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":20}}],\"filter\":true}},\"customWidth\":\"60\",\"name\":\"table-cross-layer\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"Syslog\\n| where SyslogMessage has_any (\\u0027cp \\u0027, \\u0027scp \\u0027, \\u0027rsync\\u0027, \\u0027tar czf\\u0027, \\u0027tar cz\\u0027, \\u0027zip \\u0027, \\u0027sftp\\u0027)\\n| project TimeGenerated, HostName, HostIP, ProcessName, SyslogMessage\\n| sort by TimeGenerated desc\\n| take 50\",\"size\":0,\"title\":\"Unix file copy / archive / transfer commands\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"40\",\"name\":\"table-unix-copy\"}],\"styleSettings\":{},\"$schema\":\"https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json\"}",
-        "version": "1.0",
-        "sourceId": "[resourceId(parameters('workspaceSubscription'), parameters('workspaceResourceGroup'), 'Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]",
-        "category": "sentinel"
-      }
-    }
-  ],
-  "outputs": {
-    "workbookId": {
-      "type": "string",
-      "value": "[resourceId('Microsoft.Insights/workbooks', parameters('workbookId'))]"
-    }
-  }
+    "$schema":  "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion":  "1.0.0.0",
+    "parameters":  {
+                       "workbookDisplayName":  {
+                                                   "type":  "string",
+                                                   "defaultValue":  "GOV - Data Exfiltration Across Layers",
+                                                   "metadata":  {
+                                                                    "description":  "The display name of the workbook."
+                                                                }
+                                               },
+                       "workbookId":  {
+                                          "type":  "string",
+                                          "defaultValue":  "[newGuid()]",
+                                          "metadata":  {
+                                                           "description":  "The unique ID for the workbook."
+                                                       }
+                                      },
+                       "workspaceName":  {
+                                             "type":  "string",
+                                             "metadata":  {
+                                                              "description":  "The name of the Log Analytics workspace."
+                                                          }
+                                         },
+                       "workspaceResourceGroup":  {
+                                                      "type":  "string",
+                                                      "defaultValue":  "[resourceGroup().name]",
+                                                      "metadata":  {
+                                                                       "description":  "The resource group of the Log Analytics workspace."
+                                                                   }
+                                                  },
+                       "workspaceSubscription":  {
+                                                     "type":  "string",
+                                                     "defaultValue":  "[subscription().subscriptionId]",
+                                                     "metadata":  {
+                                                                      "description":  "The subscription ID of the Log Analytics workspace."
+                                                                  }
+                                                 }
+                   },
+    "resources":  [
+                      {
+                          "type":  "Microsoft.Insights/workbooks",
+                          "apiVersion":  "2022-04-01",
+                          "name":  "[parameters(\u0027workbookId\u0027)]",
+                          "location":  "[resourceGroup().location]",
+                          "kind":  "shared",
+                          "properties":  {
+                                             "displayName":  "[parameters(\u0027workbookDisplayName\u0027)]",
+                                             "serializedData":  "{\"version\":\"Notebook/1.0\",\"items\":[{\"type\":1,\"content\":{\"json\":\"# 📤 Data Exfiltration Across Layers\\n---\\nDetects data leaving the organisation by correlating outbound proxy volume (Squid), large IIS responses, Entra audit anomalies, and Unix file access spikes. Any user appearing across multiple layers with unusual volume in the same time window is a high-confidence exfiltration signal.\"},\"name\":\"title\"},{\"type\":9,\"content\":{\"version\":\"KqlParameterItem/1.0\",\"parameters\":[{\"id\":\"timeRange\",\"version\":\"KqlParameterItem/1.0\",\"name\":\"TimeRange\",\"type\":4,\"isRequired\":true,\"value\":{\"durationMs\":604800000},\"typeSettings\":{\"selectableValues\":[{\"durationMs\":86400000},{\"durationMs\":259200000},{\"durationMs\":604800000},{\"durationMs\":2592000000}],\"allowCustom\":true},\"label\":\"Time Range\"}],\"style\":\"pills\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\"},\"name\":\"parameters\"},{\"type\":1,\"content\":{\"json\":\"## 🌐 Proxy Outbound Volume (Squid)\"},\"name\":\"proxy-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Squid\\u0027, \\u0027squid\\u0027)\\n| where isnotempty(SourceUserName)\\n| summarize OutboundBytes = sum(SentBytes), RequestCount = count(), UniqueDestinations = dcount(DestinationHostName)\\n    by UserId = SourceUserName\\n| where OutboundBytes \\u003e 104857600\\n| sort by OutboundBytes desc\\n| take 20\\n| extend OutboundMB = round(todouble(OutboundBytes) / 1048576, 1)\",\"size\":0,\"title\":\"Users with high proxy outbound volume (\\u003e100MB)\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"OutboundMB\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":1000}},{\"columnMatch\":\"UniqueDestinations\",\"formatter\":4,\"formatOptions\":{\"palette\":\"blue\",\"max\":100}}],\"filter\":true,\"sortBy\":[{\"itemKey\":\"OutboundMB\",\"sortOrder\":2}]}},\"customWidth\":\"50\",\"name\":\"table-proxy-volume\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Squid\\u0027, \\u0027squid\\u0027)\\n| where DestinationHostName has_any (\\u0027pastebin.com\\u0027, \\u0027paste.ee\\u0027, \\u0027mega.nz\\u0027, \\u0027anonfiles.com\\u0027, \\u0027transfer.sh\\u0027, \\u0027wetransfer.com\\u0027, \\u0027sendspace.com\\u0027, \\u0027dropbox.com\\u0027, \\u0027drive.google.com\\u0027, \\u0027onedrive.live.com\\u0027)\\n| project TimeGenerated, SourceUserName, SourceIP, DestinationHostName, RequestURL, SentBytes\\n| sort by TimeGenerated desc\\n| take 50\",\"size\":0,\"title\":\"Proxy requests to file sharing / paste sites\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-proxy-suspicious\"},{\"type\":1,\"content\":{\"json\":\"## 🌐 Large Web Server Responses (IIS)\"},\"name\":\"iis-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"W3CIISLog\\n| where isnotempty(cIP)\\n| where scBytes \\u003e 10485760\\n| project TimeGenerated, cIP, csMethod, csUriStem, scStatus, scBytes, csUserName, Computer\\n| extend ResponseMB = round(todouble(scBytes) / 1048576, 1)\\n| sort by scBytes desc\\n| take 50\",\"size\":0,\"title\":\"IIS responses \\u003e 10MB — large data transfers from web servers\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"ResponseMB\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":500}},{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"100\",\"name\":\"table-iis-large\"},{\"type\":1,\"content\":{\"json\":\"## 🔗 Cross-Layer Exfiltration Signal — Proxy + IIS + Unix\"},\"name\":\"correlation-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"let ProxyHeavyUsers = CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Squid\\u0027, \\u0027squid\\u0027)\\n| where isnotempty(SourceUserName)\\n| summarize ProxyBytes = sum(SentBytes) by UserId = tolower(SourceUserName)\\n| where ProxyBytes \\u003e 52428800;\\nlet LargeIISClients = W3CIISLog\\n| where scBytes \\u003e 5242880\\n| where isnotempty(cIP)\\n| summarize IISBytes = sum(scBytes), IISRequests = count() by cIP;\\nlet UnixFileCopy = Syslog\\n| where SyslogMessage has_any (\\u0027cp \\u0027, \\u0027scp \\u0027, \\u0027rsync\\u0027, \\u0027tar \\u0027, \\u0027sftp\\u0027, \\u0027ftp \\u0027)\\n| where isnotempty(HostIP)\\n| summarize UnixCopyEvents = count() by HostIP;\\nlet EntraExport = AuditLogs\\n| where OperationName in (\\u0027Export\\u0027, \\u0027Download user\\u0027, \\u0027Download report\\u0027, \\u0027Sync started\\u0027)\\n| summarize EntraExports = count()\\n    by UserId = tolower(tostring(parse_json(tostring(InitiatedBy)).user.userPrincipalName));\\nProxyHeavyUsers\\n| join kind=leftouter (EntraExport) on UserId\\n| project UserId, ProxyMB = round(todouble(ProxyBytes)/1048576, 1), EntraExports = coalesce(EntraExports, 0)\\n| where ProxyMB \\u003e 50 or EntraExports \\u003e 0\\n| sort by ProxyMB desc\",\"size\":0,\"title\":\"Multi-layer exfiltration signal — users with high proxy outbound AND Entra export activity\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"ProxyMB\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":1000}},{\"columnMatch\":\"EntraExports\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":20}}],\"filter\":true}},\"customWidth\":\"60\",\"name\":\"table-cross-layer\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"Syslog\\n| where SyslogMessage has_any (\\u0027cp \\u0027, \\u0027scp \\u0027, \\u0027rsync\\u0027, \\u0027tar czf\\u0027, \\u0027tar cz\\u0027, \\u0027zip \\u0027, \\u0027sftp\\u0027)\\n| project TimeGenerated, HostName, HostIP, ProcessName, SyslogMessage\\n| sort by TimeGenerated desc\\n| take 50\",\"size\":0,\"title\":\"Unix file copy / archive / transfer commands\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"40\",\"name\":\"table-unix-copy\"}],\"styleSettings\":{},\"$schema\":\"https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json\"}",
+                                             "version":  "1.0",
+                                             "sourceId":  "[resourceId(parameters(\u0027workspaceSubscription\u0027), parameters(\u0027workspaceResourceGroup\u0027), \u0027Microsoft.OperationalInsights/workspaces\u0027, parameters(\u0027workspaceName\u0027))]",
+                                             "category":  "sentinel"
+                                         }
+                      }
+                  ],
+    "outputs":  {
+                    "workbookId":  {
+                                       "type":  "string",
+                                       "value":  "[resourceId(\u0027Microsoft.Insights/workbooks\u0027, parameters(\u0027workbookId\u0027))]"
+                                   }
+                }
 }

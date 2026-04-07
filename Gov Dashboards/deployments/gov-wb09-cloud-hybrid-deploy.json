@@ -1,52 +1,62 @@
 {
-  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-  "contentVersion": "1.0.0.0",
-  "parameters": {
-    "workbookDisplayName": {
-      "type": "string",
-      "defaultValue": "Cloud and Hybrid Threat Correlation",
-      "metadata": { "description": "The display name of the workbook." }
-    },
-    "workbookId": {
-      "type": "string",
-      "defaultValue": "[newGuid()]",
-      "metadata": { "description": "The unique ID for the workbook." }
-    },
-    "workspaceName": {
-      "type": "string",
-      "metadata": { "description": "The name of the Log Analytics workspace." }
-    },
-    "workspaceResourceGroup": {
-      "type": "string",
-      "defaultValue": "[resourceGroup().name]",
-      "metadata": { "description": "The resource group of the Log Analytics workspace." }
-    },
-    "workspaceSubscription": {
-      "type": "string",
-      "defaultValue": "[subscription().subscriptionId]",
-      "metadata": { "description": "The subscription ID of the Log Analytics workspace." }
-    }
-  },
-  "resources": [
-    {
-      "type": "Microsoft.Insights/workbooks",
-      "apiVersion": "2022-04-01",
-      "name": "[parameters('workbookId')]",
-      "location": "[resourceGroup().location]",
-      "kind": "shared",
-      "properties": {
-        "displayName": "[parameters('workbookDisplayName')]",
-        "serializedData": "{\"version\":\"Notebook/1.0\",\"items\":[{\"type\":1,\"content\":{\"json\":\"# ☁️ Cloud \\u0026 Hybrid Threat Correlation\\n---\\nDetects attacks spanning both Azure and on-premises. An Azure resource deletion followed by on-prem admin logon from an unusual IP followed by firewall allow from that same IP = a cloud-pivoted attack in progress.\"},\"name\":\"title\"},{\"type\":9,\"content\":{\"version\":\"KqlParameterItem/1.0\",\"parameters\":[{\"id\":\"timeRange\",\"version\":\"KqlParameterItem/1.0\",\"name\":\"TimeRange\",\"type\":4,\"isRequired\":true,\"value\":{\"durationMs\":86400000},\"typeSettings\":{\"selectableValues\":[{\"durationMs\":3600000},{\"durationMs\":86400000},{\"durationMs\":259200000},{\"durationMs\":604800000}],\"allowCustom\":true},\"label\":\"Time Range\"}],\"style\":\"pills\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\"},\"name\":\"parameters\"},{\"type\":1,\"content\":{\"json\":\"## ☁️ Azure Control Plane Activity\"},\"name\":\"azure-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"AzureActivity\\n| summarize\\n    TotalOps = count(),\\n    FailedOps = countif(ActivityStatusValue == \\u0027Failure\\u0027),\\n    WriteOps = countif(ActivityStatusValue == \\u0027Success\\u0027 and OperationNameValue has_any (\\u0027write\\u0027, \\u0027create\\u0027, \\u0027delete\\u0027, \\u0027update\\u0027, \\u0027action\\u0027)),\\n    UniqueCallers = dcount(Caller)\\n| project TotalOps, FailedOps, WriteOps, UniqueCallers\",\"size\":4,\"title\":\"Azure activity summary\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"tiles\",\"tileSettings\":{\"showBorder\":true,\"titleContent\":{\"columnMatch\":\"\",\"formatter\":1},\"leftContent\":{\"columnMatch\":\"TotalOps\",\"formatter\":12,\"formatOptions\":{\"palette\":\"blue\"}}}},\"customWidth\":\"100\",\"name\":\"kpi-azure\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"AzureActivity\\n| where ActivityStatusValue == \\u0027Success\\u0027\\n| where OperationNameValue has_any (\\u0027delete\\u0027, \\u0027Delete\\u0027)\\n| project TimeGenerated, Caller, CallerIpAddress, OperationNameValue, ResourceGroup, _ResourceId\\n| sort by TimeGenerated desc\\n| take 30\",\"size\":0,\"title\":\"Azure resource deletions\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-azure-deletions\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"AzureActivity\\n| where ActivityStatusValue == \\u0027Success\\u0027\\n| where OperationNameValue has_any (\\u0027roleAssignments/write\\u0027, \\u0027vaults/secrets/write\\u0027, \\u0027networkSecurityGroups/securityRules/write\\u0027, \\u0027runCommand/action\\u0027, \\u0027Set federation\\u0027)\\n| project TimeGenerated, Caller, CallerIpAddress, OperationNameValue, ResourceGroup\\n| sort by TimeGenerated desc\\n| take 30\",\"size\":0,\"title\":\"High-risk Azure operations\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-azure-highrisk\"},{\"type\":1,\"content\":{\"json\":\"## 🔗 Cloud-to-On-Prem Attack Pivot\"},\"name\":\"pivot-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"let AzureCallers = AzureActivity\\n| where ActivityStatusValue == \\u0027Success\\u0027\\n| where OperationNameValue has_any (\\u0027write\\u0027, \\u0027delete\\u0027, \\u0027action\\u0027)\\n| where isnotempty(CallerIpAddress) and CallerIpAddress != \\u0027\\u0027\\n| summarize AzureOpCount = count(), LastAzureOp = max(TimeGenerated)\\n    by CallerIP = tostring(CallerIpAddress), Caller = tolower(Caller);\\nlet OnPremLogons = SecurityEvent\\n| where EventID == 4624\\n| where LogonType in (3, 10)\\n| where isnotempty(IpAddress) and IpAddress != \\u0027-\\u0027 and IpAddress != \\u0027127.0.0.1\\u0027\\n| summarize OnPremLogonCount = count(), LastOnPremLogon = max(TimeGenerated), Computers = make_set(Computer, 5)\\n    by CallerIP = IpAddress;\\nAzureCallers\\n| join kind=inner OnPremLogons on CallerIP\\n| project CallerIP, Caller, AzureOpCount, LastAzureOp, OnPremLogonCount, LastOnPremLogon, Computers\\n| sort by AzureOpCount desc\",\"size\":0,\"title\":\"IPs that made Azure control plane changes AND logged into on-prem Windows — cloud-to-on-prem pivot\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"AzureOpCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":100}},{\"columnMatch\":\"OnPremLogonCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":100}},{\"columnMatch\":\"LastAzureOp\",\"formatter\":6},{\"columnMatch\":\"LastOnPremLogon\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"100\",\"name\":\"table-cloud-onprem-pivot\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"let AzureCallerIPs = AzureActivity\\n| where ActivityStatusValue == \\u0027Success\\u0027\\n| where OperationNameValue has_any (\\u0027write\\u0027, \\u0027delete\\u0027, \\u0027action\\u0027)\\n| where isnotempty(CallerIpAddress)\\n| summarize by CallerIpAddress;\\nCommonSecurityLog\\n| where DeviceVendor in (\\u0027Fortinet\\u0027, \\u0027Palo Alto Networks\\u0027, \\u0027Cisco\\u0027, \\u0027Juniper\\u0027)\\n| where DeviceAction in (\\u0027allow\\u0027, \\u0027Allow\\u0027, \\u0027permit\\u0027, \\u0027Permit\\u0027, \\u0027accept\\u0027, \\u0027Accept\\u0027)\\n| where SourceIP in (AzureCallerIPs)\\n| summarize FWAllowCount = count(), DestIPs = make_set(DestinationIP, 5) by SourceIP\\n| sort by FWAllowCount desc\",\"size\":0,\"title\":\"Azure-active IPs also seen in on-prem firewall allows\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"FWAllowCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":1000}}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-azure-fw-overlap\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"AuditLogs\\n| where OperationName in (\\u0027Add member to role\\u0027, \\u0027Set federation settings on domain\\u0027, \\u0027Add application\\u0027, \\u0027Delete application\\u0027)\\n| extend InitiatedByUPN = tostring(parse_json(tostring(InitiatedBy)).user.userPrincipalName)\\n| extend InitiatedBySP = tostring(parse_json(tostring(InitiatedBy)).app.displayName)\\n| extend Actor = iff(isnotempty(InitiatedByUPN), InitiatedByUPN, InitiatedBySP)\\n| project TimeGenerated, OperationName, Actor, Result, LoggedByService\\n| sort by TimeGenerated desc\\n| take 30\",\"size\":0,\"title\":\"Entra high-risk operations — role assignments, federation changes, app registrations\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-entra-highrisk\"}],\"styleSettings\":{},\"$schema\":\"https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json\"}",
-        "version": "1.0",
-        "sourceId": "[resourceId(parameters('workspaceSubscription'), parameters('workspaceResourceGroup'), 'Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]",
-        "category": "sentinel"
-      }
-    }
-  ],
-  "outputs": {
-    "workbookId": {
-      "type": "string",
-      "value": "[resourceId('Microsoft.Insights/workbooks', parameters('workbookId'))]"
-    }
-  }
+    "$schema":  "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion":  "1.0.0.0",
+    "parameters":  {
+                       "workbookDisplayName":  {
+                                                   "type":  "string",
+                                                   "defaultValue":  "GOV - Cloud and Hybrid Threat Correlation",
+                                                   "metadata":  {
+                                                                    "description":  "The display name of the workbook."
+                                                                }
+                                               },
+                       "workbookId":  {
+                                          "type":  "string",
+                                          "defaultValue":  "[newGuid()]",
+                                          "metadata":  {
+                                                           "description":  "The unique ID for the workbook."
+                                                       }
+                                      },
+                       "workspaceName":  {
+                                             "type":  "string",
+                                             "metadata":  {
+                                                              "description":  "The name of the Log Analytics workspace."
+                                                          }
+                                         },
+                       "workspaceResourceGroup":  {
+                                                      "type":  "string",
+                                                      "defaultValue":  "[resourceGroup().name]",
+                                                      "metadata":  {
+                                                                       "description":  "The resource group of the Log Analytics workspace."
+                                                                   }
+                                                  },
+                       "workspaceSubscription":  {
+                                                     "type":  "string",
+                                                     "defaultValue":  "[subscription().subscriptionId]",
+                                                     "metadata":  {
+                                                                      "description":  "The subscription ID of the Log Analytics workspace."
+                                                                  }
+                                                 }
+                   },
+    "resources":  [
+                      {
+                          "type":  "Microsoft.Insights/workbooks",
+                          "apiVersion":  "2022-04-01",
+                          "name":  "[parameters(\u0027workbookId\u0027)]",
+                          "location":  "[resourceGroup().location]",
+                          "kind":  "shared",
+                          "properties":  {
+                                             "displayName":  "[parameters(\u0027workbookDisplayName\u0027)]",
+                                             "serializedData":  "{\"version\":\"Notebook/1.0\",\"items\":[{\"type\":1,\"content\":{\"json\":\"# ☁️ Cloud \\u0026 Hybrid Threat Correlation\\n---\\nDetects attacks spanning both Azure and on-premises. An Azure resource deletion followed by on-prem admin logon from an unusual IP followed by firewall allow from that same IP = a cloud-pivoted attack in progress.\"},\"name\":\"title\"},{\"type\":9,\"content\":{\"version\":\"KqlParameterItem/1.0\",\"parameters\":[{\"id\":\"timeRange\",\"version\":\"KqlParameterItem/1.0\",\"name\":\"TimeRange\",\"type\":4,\"isRequired\":true,\"value\":{\"durationMs\":86400000},\"typeSettings\":{\"selectableValues\":[{\"durationMs\":3600000},{\"durationMs\":86400000},{\"durationMs\":259200000},{\"durationMs\":604800000}],\"allowCustom\":true},\"label\":\"Time Range\"}],\"style\":\"pills\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\"},\"name\":\"parameters\"},{\"type\":1,\"content\":{\"json\":\"## ☁️ Azure Control Plane Activity\"},\"name\":\"azure-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"AzureActivity\\n| summarize\\n    TotalOps = count(),\\n    FailedOps = countif(ActivityStatusValue == \\u0027Failure\\u0027),\\n    WriteOps = countif(ActivityStatusValue == \\u0027Success\\u0027 and OperationNameValue has_any (\\u0027write\\u0027, \\u0027create\\u0027, \\u0027delete\\u0027, \\u0027update\\u0027, \\u0027action\\u0027)),\\n    UniqueCallers = dcount(Caller)\\n| project TotalOps, FailedOps, WriteOps, UniqueCallers\",\"size\":4,\"title\":\"Azure activity summary\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"tiles\",\"tileSettings\":{\"showBorder\":true,\"titleContent\":{\"columnMatch\":\"\",\"formatter\":1},\"leftContent\":{\"columnMatch\":\"TotalOps\",\"formatter\":12,\"formatOptions\":{\"palette\":\"blue\"}}}},\"customWidth\":\"100\",\"name\":\"kpi-azure\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"AzureActivity\\n| where ActivityStatusValue == \\u0027Success\\u0027\\n| where OperationNameValue has_any (\\u0027delete\\u0027, \\u0027Delete\\u0027)\\n| project TimeGenerated, Caller, CallerIpAddress, OperationNameValue, ResourceGroup, _ResourceId\\n| sort by TimeGenerated desc\\n| take 30\",\"size\":0,\"title\":\"Azure resource deletions\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-azure-deletions\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"AzureActivity\\n| where ActivityStatusValue == \\u0027Success\\u0027\\n| where OperationNameValue has_any (\\u0027roleAssignments/write\\u0027, \\u0027vaults/secrets/write\\u0027, \\u0027networkSecurityGroups/securityRules/write\\u0027, \\u0027runCommand/action\\u0027, \\u0027Set federation\\u0027)\\n| project TimeGenerated, Caller, CallerIpAddress, OperationNameValue, ResourceGroup\\n| sort by TimeGenerated desc\\n| take 30\",\"size\":0,\"title\":\"High-risk Azure operations\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-azure-highrisk\"},{\"type\":1,\"content\":{\"json\":\"## 🔗 Cloud-to-On-Prem Attack Pivot\"},\"name\":\"pivot-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"let AzureCallers = AzureActivity\\n| where ActivityStatusValue == \\u0027Success\\u0027\\n| where OperationNameValue has_any (\\u0027write\\u0027, \\u0027delete\\u0027, \\u0027action\\u0027)\\n| where isnotempty(CallerIpAddress) and CallerIpAddress != \\u0027\\u0027\\n| summarize AzureOpCount = count(), LastAzureOp = max(TimeGenerated)\\n    by CallerIP = tostring(CallerIpAddress), Caller = tolower(Caller);\\nlet OnPremLogons = SecurityEvent\\n| where EventID == 4624\\n| where LogonType in (3, 10)\\n| where isnotempty(IpAddress) and IpAddress != \\u0027-\\u0027 and IpAddress != \\u0027127.0.0.1\\u0027\\n| summarize OnPremLogonCount = count(), LastOnPremLogon = max(TimeGenerated), Computers = make_set(Computer, 5)\\n    by CallerIP = IpAddress;\\nAzureCallers\\n| join kind=inner OnPremLogons on CallerIP\\n| project CallerIP, Caller, AzureOpCount, LastAzureOp, OnPremLogonCount, LastOnPremLogon, Computers\\n| sort by AzureOpCount desc\",\"size\":0,\"title\":\"IPs that made Azure control plane changes AND logged into on-prem Windows — cloud-to-on-prem pivot\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"AzureOpCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":100}},{\"columnMatch\":\"OnPremLogonCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":100}},{\"columnMatch\":\"LastAzureOp\",\"formatter\":6},{\"columnMatch\":\"LastOnPremLogon\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"100\",\"name\":\"table-cloud-onprem-pivot\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"let AzureCallerIPs = AzureActivity\\n| where ActivityStatusValue == \\u0027Success\\u0027\\n| where OperationNameValue has_any (\\u0027write\\u0027, \\u0027delete\\u0027, \\u0027action\\u0027)\\n| where isnotempty(CallerIpAddress)\\n| summarize by CallerIpAddress;\\nCommonSecurityLog\\n| where DeviceVendor in (\\u0027Fortinet\\u0027, \\u0027Palo Alto Networks\\u0027, \\u0027Cisco\\u0027, \\u0027Juniper\\u0027)\\n| where DeviceAction in (\\u0027allow\\u0027, \\u0027Allow\\u0027, \\u0027permit\\u0027, \\u0027Permit\\u0027, \\u0027accept\\u0027, \\u0027Accept\\u0027)\\n| where SourceIP in (AzureCallerIPs)\\n| summarize FWAllowCount = count(), DestIPs = make_set(DestinationIP, 5) by SourceIP\\n| sort by FWAllowCount desc\",\"size\":0,\"title\":\"Azure-active IPs also seen in on-prem firewall allows\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"FWAllowCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":1000}}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-azure-fw-overlap\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"AuditLogs\\n| where OperationName in (\\u0027Add member to role\\u0027, \\u0027Set federation settings on domain\\u0027, \\u0027Add application\\u0027, \\u0027Delete application\\u0027)\\n| extend InitiatedByUPN = tostring(parse_json(tostring(InitiatedBy)).user.userPrincipalName)\\n| extend InitiatedBySP = tostring(parse_json(tostring(InitiatedBy)).app.displayName)\\n| extend Actor = iff(isnotempty(InitiatedByUPN), InitiatedByUPN, InitiatedBySP)\\n| project TimeGenerated, OperationName, Actor, Result, LoggedByService\\n| sort by TimeGenerated desc\\n| take 30\",\"size\":0,\"title\":\"Entra high-risk operations — role assignments, federation changes, app registrations\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"TimeGenerated\",\"formatter\":6}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-entra-highrisk\"}],\"styleSettings\":{},\"$schema\":\"https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json\"}",
+                                             "version":  "1.0",
+                                             "sourceId":  "[resourceId(parameters(\u0027workspaceSubscription\u0027), parameters(\u0027workspaceResourceGroup\u0027), \u0027Microsoft.OperationalInsights/workspaces\u0027, parameters(\u0027workspaceName\u0027))]",
+                                             "category":  "sentinel"
+                                         }
+                      }
+                  ],
+    "outputs":  {
+                    "workbookId":  {
+                                       "type":  "string",
+                                       "value":  "[resourceId(\u0027Microsoft.Insights/workbooks\u0027, parameters(\u0027workbookId\u0027))]"
+                                   }
+                }
 }

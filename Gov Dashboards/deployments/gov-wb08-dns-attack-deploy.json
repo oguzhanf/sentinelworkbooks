@@ -1,52 +1,62 @@
 {
-  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-  "contentVersion": "1.0.0.0",
-  "parameters": {
-    "workbookDisplayName": {
-      "type": "string",
-      "defaultValue": "DNS as an Attack Vector",
-      "metadata": { "description": "The display name of the workbook." }
-    },
-    "workbookId": {
-      "type": "string",
-      "defaultValue": "[newGuid()]",
-      "metadata": { "description": "The unique ID for the workbook." }
-    },
-    "workspaceName": {
-      "type": "string",
-      "metadata": { "description": "The name of the Log Analytics workspace." }
-    },
-    "workspaceResourceGroup": {
-      "type": "string",
-      "defaultValue": "[resourceGroup().name]",
-      "metadata": { "description": "The resource group of the Log Analytics workspace." }
-    },
-    "workspaceSubscription": {
-      "type": "string",
-      "defaultValue": "[subscription().subscriptionId]",
-      "metadata": { "description": "The subscription ID of the Log Analytics workspace." }
-    }
-  },
-  "resources": [
-    {
-      "type": "Microsoft.Insights/workbooks",
-      "apiVersion": "2022-04-01",
-      "name": "[parameters('workbookId')]",
-      "location": "[resourceGroup().location]",
-      "kind": "shared",
-      "properties": {
-        "displayName": "[parameters('workbookDisplayName')]",
-        "serializedData": "{\"version\":\"Notebook/1.0\",\"items\":[{\"type\":1,\"content\":{\"json\":\"# 🌐 DNS as an Attack Vector\\n---\\nInfoBlox is an early warning system. Correlates DHCP IP assignments with DNS resolution activity. A device that resolves a suspicious domain and then makes an outbound firewall-allowed connection to that same IP is confirmed C2 communication — not just a DNS query.\"},\"name\":\"title\"},{\"type\":9,\"content\":{\"version\":\"KqlParameterItem/1.0\",\"parameters\":[{\"id\":\"timeRange\",\"version\":\"KqlParameterItem/1.0\",\"name\":\"TimeRange\",\"type\":4,\"isRequired\":true,\"value\":{\"durationMs\":86400000},\"typeSettings\":{\"selectableValues\":[{\"durationMs\":3600000},{\"durationMs\":86400000},{\"durationMs\":259200000},{\"durationMs\":604800000}],\"allowCustom\":true},\"label\":\"Time Range\"}],\"style\":\"pills\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\"},\"name\":\"parameters\"},{\"type\":1,\"content\":{\"json\":\"## 📋 InfoBlox DNS Activity\"},\"name\":\"dns-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Infoblox\\u0027, \\u0027InfoBlox\\u0027, \\u0027INFOBLOX\\u0027)\\n| summarize\\n    TotalDNSEvents = count(),\\n    BlockedDomains = countif(DeviceAction in (\\u0027block\\u0027, \\u0027Block\\u0027, \\u0027deny\\u0027, \\u0027Deny\\u0027)),\\n    UniqueSources = dcount(SourceIP)\\n| project TotalDNSEvents, BlockedDomains, UniqueSources\",\"size\":4,\"title\":\"InfoBlox DNS summary\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"tiles\",\"tileSettings\":{\"showBorder\":true,\"titleContent\":{\"columnMatch\":\"\",\"formatter\":1},\"leftContent\":{\"columnMatch\":\"TotalDNSEvents\",\"formatter\":12,\"formatOptions\":{\"palette\":\"blue\"}}}},\"customWidth\":\"100\",\"name\":\"kpi-dns\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Infoblox\\u0027, \\u0027InfoBlox\\u0027, \\u0027INFOBLOX\\u0027)\\n| where DeviceAction in (\\u0027block\\u0027, \\u0027Block\\u0027, \\u0027deny\\u0027, \\u0027Deny\\u0027)\\n| summarize BlockCount = count() by DestinationHostName\\n| where isnotempty(DestinationHostName)\\n| sort by BlockCount desc\\n| take 20\",\"size\":0,\"title\":\"Top blocked DNS domains\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"BlockCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":500}}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-blocked-dns\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Infoblox\\u0027, \\u0027InfoBlox\\u0027, \\u0027INFOBLOX\\u0027)\\n| where isnotempty(SourceIP)\\n| summarize QueryCount = count() by SourceIP\\n| sort by QueryCount desc\\n| take 20\",\"size\":0,\"title\":\"Most active DNS clients\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"QueryCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"blue\",\"max\":10000}}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-dns-clients\"},{\"type\":1,\"content\":{\"json\":\"## 🔴 DNS Resolution → Firewall Connection (C2 Confirmation)\"},\"name\":\"c2-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"let DNSResolutions = CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Infoblox\\u0027, \\u0027InfoBlox\\u0027, \\u0027INFOBLOX\\u0027)\\n| where isnotempty(SourceIP) and isnotempty(DestinationHostName)\\n| where DestinationHostName has_any (\\u0027.onion\\u0027, \\u0027.bit\\u0027, \\u0027.cc\\u0027, \\u0027.ru\\u0027, \\u0027.cn\\u0027, \\u0027.tk\\u0027, \\u0027.pw\\u0027, \\u0027.xyz\\u0027, \\u0027.top\\u0027, \\u0027ngrok\\u0027, \\u0027ddns\\u0027, \\u0027duckdns\\u0027, \\u0027no-ip\\u0027)\\n| summarize DNSQueryCount = count(), Domains = make_set(DestinationHostName, 5) by ClientIP = SourceIP;\\nlet FWConnections = CommonSecurityLog\\n| where DeviceVendor in (\\u0027Fortinet\\u0027, \\u0027Palo Alto Networks\\u0027, \\u0027Cisco\\u0027, \\u0027Juniper\\u0027)\\n| where DeviceAction in (\\u0027allow\\u0027, \\u0027Allow\\u0027, \\u0027permit\\u0027, \\u0027Permit\\u0027, \\u0027accept\\u0027, \\u0027Accept\\u0027)\\n| where isnotempty(SourceIP)\\n| summarize ConnectionCount = count() by SourceIP, DestinationIP;\\nDNSResolutions\\n| join kind=inner (FWConnections | project ClientIP = SourceIP, DestinationIP, ConnectionCount) on ClientIP\\n| project ClientIP, DNSQueryCount, Domains, DestinationIP, ConnectionCount\\n| sort by DNSQueryCount desc\",\"size\":0,\"title\":\"Clients that queried suspicious DNS domains AND made firewall-allowed outbound connections — C2 candidates\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"DNSQueryCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":100}},{\"columnMatch\":\"ConnectionCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":100}}],\"filter\":true}},\"customWidth\":\"100\",\"name\":\"table-dns-c2\"},{\"type\":1,\"content\":{\"json\":\"## 📊 DNS Anomalies\"},\"name\":\"dns-anomaly-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Infoblox\\u0027, \\u0027InfoBlox\\u0027, \\u0027INFOBLOX\\u0027)\\n| where isnotempty(SourceIP)\\n| summarize QueryCount = count() by SourceIP, bin(TimeGenerated, 1h)\\n| where QueryCount \\u003e 500\\n| sort by QueryCount desc\",\"size\":0,\"title\":\"DNS query volume spikes — \\u003e500 queries per hour from one source\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"QueryCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":5000}}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-dns-spikes\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"Syslog\\n| where ProcessName has_any (\\u0027named\\u0027, \\u0027unbound\\u0027, \\u0027bind\\u0027, \\u0027dnsmasq\\u0027)\\n| where SyslogMessage has_any (\\u0027NXDOMAIN\\u0027, \\u0027SERVFAIL\\u0027, \\u0027refused\\u0027, \\u0027query failed\\u0027, \\u0027lame server\\u0027)\\n| summarize ErrorCount = count() by HostName, SeverityLevel\\n| sort by ErrorCount desc\\n| take 20\",\"size\":0,\"title\":\"DNS server errors (NXDOMAIN / SERVFAIL spikes)\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"ErrorCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":500}}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-dns-errors\"}],\"styleSettings\":{},\"$schema\":\"https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json\"}",
-        "version": "1.0",
-        "sourceId": "[resourceId(parameters('workspaceSubscription'), parameters('workspaceResourceGroup'), 'Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]",
-        "category": "sentinel"
-      }
-    }
-  ],
-  "outputs": {
-    "workbookId": {
-      "type": "string",
-      "value": "[resourceId('Microsoft.Insights/workbooks', parameters('workbookId'))]"
-    }
-  }
+    "$schema":  "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion":  "1.0.0.0",
+    "parameters":  {
+                       "workbookDisplayName":  {
+                                                   "type":  "string",
+                                                   "defaultValue":  "GOV - DNS as an Attack Vector",
+                                                   "metadata":  {
+                                                                    "description":  "The display name of the workbook."
+                                                                }
+                                               },
+                       "workbookId":  {
+                                          "type":  "string",
+                                          "defaultValue":  "[newGuid()]",
+                                          "metadata":  {
+                                                           "description":  "The unique ID for the workbook."
+                                                       }
+                                      },
+                       "workspaceName":  {
+                                             "type":  "string",
+                                             "metadata":  {
+                                                              "description":  "The name of the Log Analytics workspace."
+                                                          }
+                                         },
+                       "workspaceResourceGroup":  {
+                                                      "type":  "string",
+                                                      "defaultValue":  "[resourceGroup().name]",
+                                                      "metadata":  {
+                                                                       "description":  "The resource group of the Log Analytics workspace."
+                                                                   }
+                                                  },
+                       "workspaceSubscription":  {
+                                                     "type":  "string",
+                                                     "defaultValue":  "[subscription().subscriptionId]",
+                                                     "metadata":  {
+                                                                      "description":  "The subscription ID of the Log Analytics workspace."
+                                                                  }
+                                                 }
+                   },
+    "resources":  [
+                      {
+                          "type":  "Microsoft.Insights/workbooks",
+                          "apiVersion":  "2022-04-01",
+                          "name":  "[parameters(\u0027workbookId\u0027)]",
+                          "location":  "[resourceGroup().location]",
+                          "kind":  "shared",
+                          "properties":  {
+                                             "displayName":  "[parameters(\u0027workbookDisplayName\u0027)]",
+                                             "serializedData":  "{\"version\":\"Notebook/1.0\",\"items\":[{\"type\":1,\"content\":{\"json\":\"# 🌐 DNS as an Attack Vector\\n---\\nInfoBlox is an early warning system. Correlates DHCP IP assignments with DNS resolution activity. A device that resolves a suspicious domain and then makes an outbound firewall-allowed connection to that same IP is confirmed C2 communication — not just a DNS query.\"},\"name\":\"title\"},{\"type\":9,\"content\":{\"version\":\"KqlParameterItem/1.0\",\"parameters\":[{\"id\":\"timeRange\",\"version\":\"KqlParameterItem/1.0\",\"name\":\"TimeRange\",\"type\":4,\"isRequired\":true,\"value\":{\"durationMs\":86400000},\"typeSettings\":{\"selectableValues\":[{\"durationMs\":3600000},{\"durationMs\":86400000},{\"durationMs\":259200000},{\"durationMs\":604800000}],\"allowCustom\":true},\"label\":\"Time Range\"}],\"style\":\"pills\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\"},\"name\":\"parameters\"},{\"type\":1,\"content\":{\"json\":\"## 📋 InfoBlox DNS Activity\"},\"name\":\"dns-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Infoblox\\u0027, \\u0027InfoBlox\\u0027, \\u0027INFOBLOX\\u0027)\\n| summarize\\n    TotalDNSEvents = count(),\\n    BlockedDomains = countif(DeviceAction in (\\u0027block\\u0027, \\u0027Block\\u0027, \\u0027deny\\u0027, \\u0027Deny\\u0027)),\\n    UniqueSources = dcount(SourceIP)\\n| project TotalDNSEvents, BlockedDomains, UniqueSources\",\"size\":4,\"title\":\"InfoBlox DNS summary\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"tiles\",\"tileSettings\":{\"showBorder\":true,\"titleContent\":{\"columnMatch\":\"\",\"formatter\":1},\"leftContent\":{\"columnMatch\":\"TotalDNSEvents\",\"formatter\":12,\"formatOptions\":{\"palette\":\"blue\"}}}},\"customWidth\":\"100\",\"name\":\"kpi-dns\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Infoblox\\u0027, \\u0027InfoBlox\\u0027, \\u0027INFOBLOX\\u0027)\\n| where DeviceAction in (\\u0027block\\u0027, \\u0027Block\\u0027, \\u0027deny\\u0027, \\u0027Deny\\u0027)\\n| summarize BlockCount = count() by DestinationHostName\\n| where isnotempty(DestinationHostName)\\n| sort by BlockCount desc\\n| take 20\",\"size\":0,\"title\":\"Top blocked DNS domains\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"BlockCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":500}}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-blocked-dns\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Infoblox\\u0027, \\u0027InfoBlox\\u0027, \\u0027INFOBLOX\\u0027)\\n| where isnotempty(SourceIP)\\n| summarize QueryCount = count() by SourceIP\\n| sort by QueryCount desc\\n| take 20\",\"size\":0,\"title\":\"Most active DNS clients\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"QueryCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"blue\",\"max\":10000}}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-dns-clients\"},{\"type\":1,\"content\":{\"json\":\"## 🔴 DNS Resolution → Firewall Connection (C2 Confirmation)\"},\"name\":\"c2-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"let DNSResolutions = CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Infoblox\\u0027, \\u0027InfoBlox\\u0027, \\u0027INFOBLOX\\u0027)\\n| where isnotempty(SourceIP) and isnotempty(DestinationHostName)\\n| where DestinationHostName has_any (\\u0027.onion\\u0027, \\u0027.bit\\u0027, \\u0027.cc\\u0027, \\u0027.ru\\u0027, \\u0027.cn\\u0027, \\u0027.tk\\u0027, \\u0027.pw\\u0027, \\u0027.xyz\\u0027, \\u0027.top\\u0027, \\u0027ngrok\\u0027, \\u0027ddns\\u0027, \\u0027duckdns\\u0027, \\u0027no-ip\\u0027)\\n| summarize DNSQueryCount = count(), Domains = make_set(DestinationHostName, 5) by ClientIP = SourceIP;\\nlet FWConnections = CommonSecurityLog\\n| where DeviceVendor in (\\u0027Fortinet\\u0027, \\u0027Palo Alto Networks\\u0027, \\u0027Cisco\\u0027, \\u0027Juniper\\u0027)\\n| where DeviceAction in (\\u0027allow\\u0027, \\u0027Allow\\u0027, \\u0027permit\\u0027, \\u0027Permit\\u0027, \\u0027accept\\u0027, \\u0027Accept\\u0027)\\n| where isnotempty(SourceIP)\\n| summarize ConnectionCount = count() by SourceIP, DestinationIP;\\nDNSResolutions\\n| join kind=inner (FWConnections | project ClientIP = SourceIP, DestinationIP, ConnectionCount) on ClientIP\\n| project ClientIP, DNSQueryCount, Domains, DestinationIP, ConnectionCount\\n| sort by DNSQueryCount desc\",\"size\":0,\"title\":\"Clients that queried suspicious DNS domains AND made firewall-allowed outbound connections — C2 candidates\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"DNSQueryCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":100}},{\"columnMatch\":\"ConnectionCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":100}}],\"filter\":true}},\"customWidth\":\"100\",\"name\":\"table-dns-c2\"},{\"type\":1,\"content\":{\"json\":\"## 📊 DNS Anomalies\"},\"name\":\"dns-anomaly-header\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"CommonSecurityLog\\n| where DeviceVendor has_any (\\u0027Infoblox\\u0027, \\u0027InfoBlox\\u0027, \\u0027INFOBLOX\\u0027)\\n| where isnotempty(SourceIP)\\n| summarize QueryCount = count() by SourceIP, bin(TimeGenerated, 1h)\\n| where QueryCount \\u003e 500\\n| sort by QueryCount desc\",\"size\":0,\"title\":\"DNS query volume spikes — \\u003e500 queries per hour from one source\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"QueryCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":5000}}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-dns-spikes\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"Syslog\\n| where ProcessName has_any (\\u0027named\\u0027, \\u0027unbound\\u0027, \\u0027bind\\u0027, \\u0027dnsmasq\\u0027)\\n| where SyslogMessage has_any (\\u0027NXDOMAIN\\u0027, \\u0027SERVFAIL\\u0027, \\u0027refused\\u0027, \\u0027query failed\\u0027, \\u0027lame server\\u0027)\\n| summarize ErrorCount = count() by HostName, SeverityLevel\\n| sort by ErrorCount desc\\n| take 20\",\"size\":0,\"title\":\"DNS server errors (NXDOMAIN / SERVFAIL spikes)\",\"timeContext\":{\"durationMs\":0},\"timeContextFromParameter\":\"TimeRange\",\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\",\"visualization\":\"table\",\"gridSettings\":{\"formatters\":[{\"columnMatch\":\"ErrorCount\",\"formatter\":4,\"formatOptions\":{\"palette\":\"redGreen\",\"max\":500}}],\"filter\":true}},\"customWidth\":\"50\",\"name\":\"table-dns-errors\"}],\"styleSettings\":{},\"$schema\":\"https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json\"}",
+                                             "version":  "1.0",
+                                             "sourceId":  "[resourceId(parameters(\u0027workspaceSubscription\u0027), parameters(\u0027workspaceResourceGroup\u0027), \u0027Microsoft.OperationalInsights/workspaces\u0027, parameters(\u0027workspaceName\u0027))]",
+                                             "category":  "sentinel"
+                                         }
+                      }
+                  ],
+    "outputs":  {
+                    "workbookId":  {
+                                       "type":  "string",
+                                       "value":  "[resourceId(\u0027Microsoft.Insights/workbooks\u0027, parameters(\u0027workbookId\u0027))]"
+                                   }
+                }
 }
