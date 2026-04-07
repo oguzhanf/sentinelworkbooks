@@ -1,0 +1,150 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": { "json": "# 🛡️ Perimeter Breach Detection\n---\nCorrelates firewall allow/deny events with downstream web server activity to detect confirmed perimeter breaches. A firewall allow followed by web exploit attempts or error spikes from the same source IP is a confirmed breach — not just a noisy alert." },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          { "id": "timeRange", "version": "KqlParameterItem/1.0", "name": "TimeRange", "type": 4, "isRequired": true, "value": { "durationMs": 86400000 }, "typeSettings": { "selectableValues": [{ "durationMs": 3600000 },{ "durationMs": 86400000 },{ "durationMs": 259200000 },{ "durationMs": 604800000 }], "allowCustom": true }, "label": "Time Range" }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 📊 Firewall Overview" },
+      "name": "fw-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "CommonSecurityLog\n| where DeviceVendor in ('Fortinet', 'Palo Alto Networks', 'Cisco', 'Juniper')\n| summarize\n    TotalEvents = count(),\n    Allowed = countif(DeviceAction in ('allow', 'permit', 'accept', 'ACCEPT', 'Allow')),\n    Denied = countif(DeviceAction in ('deny', 'block', 'drop', 'DROP', 'Deny', 'Block')),\n    UniqueSourceIPs = dcount(SourceIP),\n    UniqueVendors = dcount(DeviceVendor)\n| project TotalEvents, Allowed, Denied, UniqueSourceIPs, UniqueVendors",
+        "size": 4, "title": "Firewall traffic summary",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": { "showBorder": true, "titleContent": { "columnMatch": "", "formatter": 1 }, "leftContent": { "columnMatch": "TotalEvents", "formatter": 12, "formatOptions": { "palette": "blue" } } }
+      },
+      "customWidth": "100", "name": "kpi-fw"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "CommonSecurityLog\n| where DeviceVendor in ('Fortinet', 'Palo Alto Networks', 'Cisco', 'Juniper')\n| summarize EventCount = count() by bin(TimeGenerated, 1h), DeviceAction\n| where DeviceAction in ('allow', 'permit', 'accept', 'ACCEPT', 'Allow', 'deny', 'block', 'drop', 'DROP', 'Deny', 'Block')\n| sort by TimeGenerated asc",
+        "size": 3, "title": "Allow vs deny trend",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "linechart"
+      },
+      "customWidth": "60", "name": "chart-fw-trend"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "CommonSecurityLog\n| where DeviceVendor in ('Fortinet', 'Palo Alto Networks', 'Cisco', 'Juniper')\n| where DeviceAction in ('deny', 'block', 'drop', 'DROP', 'Deny', 'Block')\n| summarize DenyCount = count() by SourceIP\n| sort by DenyCount desc\n| take 10",
+        "size": 0, "title": "Top denied source IPs",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "DenyCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 1000 } }], "filter": true }
+      },
+      "customWidth": "40", "name": "table-top-denied"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔴 Breach Candidates — Firewall Allow → Web Attack" },
+      "name": "breach-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let AllowedIPs = CommonSecurityLog\n| where DeviceVendor in ('Fortinet', 'Palo Alto Networks', 'Cisco', 'Juniper')\n| where DeviceAction in ('allow', 'permit', 'accept', 'ACCEPT', 'Allow')\n| where isnotempty(SourceIP)\n| summarize AllowCount = count(), LastAllowed = max(TimeGenerated) by SourceIP;\nlet WebAttacks = W3CIISLog\n| where scStatus startswith '4' or scStatus startswith '5'\n| where isnotempty(cIP)\n| summarize WebErrors = count(), LastError = max(TimeGenerated), URIs = make_set(csUriStem, 5) by cIP;\nAllowedIPs\n| join kind=inner (\n    WebAttacks | project SourceIP = cIP, WebErrors, LastError, URIs\n) on SourceIP\n| project SourceIP, AllowCount, LastAllowed, WebErrors, LastError, URIs\n| sort by WebErrors desc",
+        "size": 0, "title": "IPs allowed through firewall that then generated web server errors — breach candidates",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "AllowCount", "formatter": 4, "formatOptions": { "palette": "blue", "max": 1000 } },
+            { "columnMatch": "WebErrors", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 500 } },
+            { "columnMatch": "LastAllowed", "formatter": 6 },
+            { "columnMatch": "LastError", "formatter": 6 }
+          ], "filter": true, "sortBy": [{ "itemKey": "WebErrors", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "100", "name": "table-breach-candidates"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let AllowedIPs = CommonSecurityLog\n| where DeviceVendor in ('Fortinet', 'Palo Alto Networks', 'Cisco', 'Juniper')\n| where DeviceAction in ('allow', 'permit', 'accept', 'ACCEPT', 'Allow')\n| where isnotempty(SourceIP)\n| summarize by SourceIP;\nW3CIISLog\n| where isnotempty(cIP)\n| join kind=inner (AllowedIPs | project cIP = SourceIP) on cIP\n| where csUriStem has_any ('../', '.php?', 'cmd=', 'exec=', 'passwd', 'etc/passwd', 'select+', 'union+', '<script', 'eval(', 'base64')\n| project TimeGenerated, cIP, csMethod, csUriStem, csUriQuery, scStatus, csUserAgent, Computer\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0, "title": "Web exploit attempts from firewall-allowed IPs",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "TimeGenerated", "formatter": 6 }], "filter": true }
+      },
+      "customWidth": "100", "name": "table-web-exploits"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🌍 Geo & Protocol Analysis" },
+      "name": "geo-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "CommonSecurityLog\n| where DeviceVendor in ('Fortinet', 'Palo Alto Networks', 'Cisco', 'Juniper')\n| where DeviceAction in ('allow', 'permit', 'accept', 'ACCEPT', 'Allow')\n| where isnotempty(DestinationPort)\n| summarize AllowCount = count() by DestinationPort, ApplicationProtocol\n| sort by AllowCount desc\n| take 15",
+        "size": 0, "title": "Top allowed destination ports & protocols",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "AllowCount", "formatter": 4, "formatOptions": { "palette": "blue", "max": 10000 } }], "filter": true }
+      },
+      "customWidth": "50", "name": "table-allowed-ports"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "CommonSecurityLog\n| where DeviceVendor in ('Fortinet', 'Palo Alto Networks', 'Cisco', 'Juniper')\n| where DeviceAction in ('deny', 'block', 'drop', 'DROP', 'Deny', 'Block')\n| where isnotempty(DestinationPort)\n| summarize DenyCount = count() by DestinationPort, ApplicationProtocol\n| sort by DenyCount desc\n| take 15",
+        "size": 0, "title": "Top denied destination ports & protocols",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "DenyCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 10000 } }], "filter": true }
+      },
+      "customWidth": "50", "name": "table-denied-ports"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "CommonSecurityLog\n| where DeviceVendor in ('Fortinet', 'Palo Alto Networks', 'Cisco', 'Juniper')\n| where DeviceAction in ('allow', 'permit', 'accept', 'ACCEPT', 'Allow')\n| where isnotempty(SourceIP)\n| summarize AllowCount = count() by SourceIP\n| sort by AllowCount desc\n| take 20",
+        "size": 0, "title": "Most active allowed source IPs",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "AllowCount", "formatter": 4, "formatOptions": { "palette": "blue", "max": 10000 } }], "filter": true }
+      },
+      "customWidth": "100", "name": "table-active-sources"
+    }
+  ],
+  "styleSettings": {},
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

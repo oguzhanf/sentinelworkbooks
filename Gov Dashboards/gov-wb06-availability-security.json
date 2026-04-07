@@ -1,0 +1,115 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": { "json": "# 📡 Infrastructure Availability vs Security\n---\nAnswers the critical question: is this an outage or an attack? Correlates NMS device-down events (Ericsson/Huawei/Zhone Syslog) with firewall traffic spikes to the same device. An 'unreachable' alert preceded by a traffic spike = DDoS or attack, not hardware failure." },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          { "id": "timeRange", "version": "KqlParameterItem/1.0", "name": "TimeRange", "type": 4, "isRequired": true, "value": { "durationMs": 86400000 }, "typeSettings": { "selectableValues": [{ "durationMs": 3600000 },{ "durationMs": 86400000 },{ "durationMs": 259200000 },{ "durationMs": 604800000 }], "allowCustom": true }, "label": "Time Range" }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 📉 Device Availability Events (NMS — Ericsson / Huawei / Zhone)" },
+      "name": "nms-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Syslog\n| where SyslogMessage has_any ('down', 'unreachable', 'offline', 'link down', 'interface down', 'critical', 'alarm', 'failure', 'not responding', 'timeout', 'lost connection')\n| where ProcessName has_any ('snmptrap', 'snmpd', 'nms', 'ems', 'ossrc', 'hems') or HostName has_any ('nms', 'ems', 'ericsson', 'huawei', 'zhone', 'alcatel')\n| summarize EventCount = count() by bin(TimeGenerated, 30m), HostName\n| sort by TimeGenerated desc",
+        "size": 3, "title": "NMS device availability events over time",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "linechart"
+      },
+      "customWidth": "60", "name": "chart-nms-events"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Syslog\n| where SyslogMessage has_any ('down', 'unreachable', 'offline', 'link down', 'interface down', 'critical', 'alarm', 'failure')\n| where ProcessName has_any ('snmptrap', 'snmpd', 'nms', 'ems', 'ossrc', 'hems') or HostName has_any ('nms', 'ems', 'ericsson', 'huawei', 'zhone')\n| summarize AlertCount = count() by HostName\n| sort by AlertCount desc\n| take 15",
+        "size": 0, "title": "Most alerted NMS hosts",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "AlertCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 100 } }], "filter": true }
+      },
+      "customWidth": "40", "name": "table-nms-hosts"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔴 Outage vs Attack Correlation — NMS Down + Firewall Traffic Spike" },
+      "name": "correlation-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let NMSDownEvents = Syslog\n| where SyslogMessage has_any ('down', 'unreachable', 'offline', 'link down', 'interface down')\n| where ProcessName has_any ('snmptrap', 'snmpd', 'nms', 'ems') or HostName has_any ('nms', 'ems', 'ericsson', 'huawei', 'zhone')\n| project DownTime = TimeGenerated, NMSHost = HostName, DownMessage = SyslogMessage\n| extend HostIP = extract(@'(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})', 1, DownMessage);\nlet FWSpikes = CommonSecurityLog\n| where DeviceVendor in ('Fortinet', 'Palo Alto Networks', 'Cisco', 'Juniper')\n| summarize TrafficCount = count() by TargetIP = DestinationIP, bin(TimeGenerated, 30m)\n| where TrafficCount > 1000;\nNMSDownEvents\n| join kind=leftouter (\n    FWSpikes | project TargetIP, SpikeTime = TimeGenerated, TrafficCount\n) on $left.HostIP == $right.TargetIP\n| where isnotempty(SpikeTime) and abs(datetime_diff('minute', DownTime, SpikeTime)) < 30\n| project NMSHost, DownTime, DownMessage, SpikeTime, TrafficCount\n| sort by DownTime desc",
+        "size": 0, "title": "NMS device-down events with firewall traffic spike within 30 minutes — attack-induced outage candidates",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "DownTime", "formatter": 6 },
+            { "columnMatch": "SpikeTime", "formatter": 6 },
+            { "columnMatch": "TrafficCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 50000 } }
+          ], "filter": true
+        }
+      },
+      "customWidth": "100", "name": "table-outage-vs-attack"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🖥️ Agent & Connector Health" },
+      "name": "health-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Heartbeat\n| summarize LastHeartbeat = max(TimeGenerated), HBCount = count() by Computer, OSType, ComputerEnvironment\n| extend SilentFor = now() - LastHeartbeat\n| where SilentFor > 15m\n| project Computer, OSType, ComputerEnvironment, LastHeartbeat, SilentMinutes = round(totimespan(SilentFor) / 1m, 0)\n| sort by SilentMinutes desc",
+        "size": 0, "title": "Agents silent for more than 15 minutes",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "SilentMinutes", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 1440 } },
+            { "columnMatch": "LastHeartbeat", "formatter": 6 }
+          ], "filter": true, "sortBy": [{ "itemKey": "SilentMinutes", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "60", "name": "table-silent-agents"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Heartbeat\n| summarize AgentCount = dcount(Computer), OnlineAgents = dcountif(Computer, TimeGenerated > ago(15m)) by OSType\n| extend OfflineAgents = AgentCount - OnlineAgents",
+        "size": 0, "title": "Agent availability by OS type",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "filter": true }
+      },
+      "customWidth": "40", "name": "table-agent-health"
+    }
+  ],
+  "styleSettings": {},
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

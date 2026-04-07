@@ -1,0 +1,443 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# 💻 Endpoint Compromise & Lateral Movement\n---\nTraces the full attack chain on endpoints — from initial alert through process execution, network connections, file activity, and lateral movement to other devices. Correlates MDE telemetry across five tables to build a complete picture of what happened after a device was compromised."
+      },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "timeRange",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "type": 4,
+            "isRequired": true,
+            "value": { "durationMs": 604800000 },
+            "typeSettings": {
+              "selectableValues": [
+                { "durationMs": 86400000 },
+                { "durationMs": 259200000 },
+                { "durationMs": 604800000 },
+                { "durationMs": 2592000000 }
+              ],
+              "allowCustom": true
+            },
+            "label": "Time Range"
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🚨 Alert Summary by Device" },
+      "name": "alerts-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AlertInfo\n| summarize\n    TotalAlerts = count(),\n    HighAlerts = countif(Severity == 'High'),\n    MedAlerts = countif(Severity == 'Medium'),\n    UniqueDevices = dcount(AlertId)\n| project TotalAlerts, HighAlerts, MedAlerts, UniqueDevices",
+        "size": 4,
+        "title": "Alert overview",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": { "columnMatch": "", "formatter": 1 },
+          "leftContent": { "columnMatch": "TotalAlerts", "formatter": 12, "formatOptions": { "palette": "blue" } }
+        }
+      },
+      "customWidth": "100",
+      "name": "kpi-alerts"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityAlert\n| where isnotempty(CompromisedEntity)\n| summarize AlertCount = count(), HighCount = countif(AlertSeverity == 'High') by DeviceName = CompromisedEntity\n| sort by AlertCount desc\n| take 15",
+        "size": 0,
+        "title": "Most alerted devices",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "AlertCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 50 } },
+            { "columnMatch": "HighCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 20 } }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "AlertCount", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "50",
+      "name": "table-alerted-devices"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AlertInfo\n| summarize AlertCount = count() by Category\n| sort by AlertCount desc",
+        "size": 3,
+        "title": "Alerts by MITRE category",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart"
+      },
+      "customWidth": "50",
+      "name": "chart-category"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AlertInfo\n| where Severity in ('High', 'Medium')\n| project TimeGenerated, Title, Severity, Category, ServiceSource, DetectionSource, AttackTechniques\n| sort by TimeGenerated desc\n| take 30",
+        "size": 0,
+        "title": "Recent high & medium severity alerts",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Severity",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "High", "representation": "critical", "text": "{0}{1}" },
+                  { "operator": "==", "thresholdValue": "Medium", "representation": "warning", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "success", "text": "{0}{1}" }
+                ]
+              }
+            },
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "100",
+      "name": "table-recent-alerts"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## ⚙️ Suspicious Process Execution" },
+      "name": "process-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceProcessEvents\n| where FileName in~ (\n    'powershell.exe', 'cmd.exe', 'wscript.exe', 'cscript.exe',\n    'mshta.exe', 'certutil.exe', 'regsvr32.exe', 'rundll32.exe',\n    'msiexec.exe', 'wmic.exe', 'bitsadmin.exe', 'schtasks.exe',\n    'at.exe', 'net.exe', 'net1.exe', 'nltest.exe', 'whoami.exe',\n    'mimikatz.exe', 'psexec.exe', 'psexec64.exe'\n)\n| project TimeGenerated, DeviceName, AccountName, FileName, ProcessCommandLine, InitiatingProcessFileName, InitiatingProcessCommandLine\n| sort by TimeGenerated desc\n| take 100",
+        "size": 0,
+        "title": "LOLBin & suspicious process executions",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "TimeGenerated", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "100",
+      "name": "table-lolbins"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceProcessEvents\n| where InitiatingProcessFileName in~ ('powershell.exe', 'cmd.exe', 'wscript.exe', 'cscript.exe', 'mshta.exe')\n| where FileName !in~ ('conhost.exe', 'cmd.exe', 'powershell.exe')\n| summarize ChildProcessCount = count() by InitiatingProcessFileName, FileName, DeviceName\n| sort by ChildProcessCount desc\n| take 20",
+        "size": 0,
+        "title": "Suspicious child process spawning",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "ChildProcessCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 20 } }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-child-processes"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceProcessEvents\n| where ProcessCommandLine has_any ('download', 'webclient', 'invoke-expression', 'iex', 'http://', 'https://', '-enc', '-encodedcommand', 'bypass', 'hidden', '-nop', '-noprofile')\n| project TimeGenerated, DeviceName, AccountName, FileName, ProcessCommandLine\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "Encoded & download commands",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-encoded-commands"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🌐 Network Connections — C2 & Exfil Indicators" },
+      "name": "network-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceNetworkEvents\n| where ActionType == 'ConnectionSuccess'\n| where RemoteIPType == 'Public'\n| summarize ConnectionCount = count(), DeviceCount = dcount(DeviceId) by RemoteIP, RemotePort, InitiatingProcessFileName\n| where ConnectionCount > 5\n| sort by ConnectionCount desc\n| take 20",
+        "size": 0,
+        "title": "High-frequency outbound connections to public IPs",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "ConnectionCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 100 } }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "ConnectionCount", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "60",
+      "name": "table-outbound-connections"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceNetworkEvents\n| where ActionType == 'ConnectionSuccess'\n| where RemotePort in (4444, 4445, 1337, 8080, 8443, 9001, 9002, 31337)\n| project TimeGenerated, DeviceName, RemoteIP, RemotePort, RemoteUrl, InitiatingProcessFileName, InitiatingProcessCommandLine\n| sort by TimeGenerated desc",
+        "size": 0,
+        "title": "Connections to common C2 ports",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "40",
+      "name": "table-c2-ports"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceNetworkEvents\n| where ActionType == 'ConnectionSuccess'\n| where RemotePort == 445\n| summarize SMBTargetCount = dcount(RemoteIP) by DeviceName, InitiatingProcessFileName\n| where SMBTargetCount > 3\n| sort by SMBTargetCount desc",
+        "size": 0,
+        "title": "SMB scanning — devices touching many internal targets on port 445",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "SMBTargetCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 20 } }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-smb-scan"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceNetworkEvents\n| where ActionType == 'ConnectionSuccess'\n| where isnotempty(RemoteUrl)\n| where RemoteUrl has_any ('.onion', 'pastebin.com', 'paste.ee', 'ngrok.io', 'serveo.net', 'portmap.io')\n| project TimeGenerated, DeviceName, RemoteUrl, RemoteIP, InitiatingProcessFileName\n| sort by TimeGenerated desc",
+        "size": 0,
+        "title": "Connections to suspicious domains",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-suspicious-domains"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 📁 Credential & Sensitive File Access" },
+      "name": "file-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceFileEvents\n| where FolderPath has_any (\n    'lsass', 'SAM', 'SYSTEM', 'SECURITY',\n    'ntds.dit', 'credentials', 'keepass',\n    'unattend.xml', 'sysprep', 'Groups.xml'\n)\n| project TimeGenerated, DeviceName, ActionType, FileName, FolderPath, InitiatingProcessFileName, InitiatingProcessCommandLine, InitiatingProcessAccountName\n| sort by TimeGenerated desc",
+        "size": 0,
+        "title": "Access to credential stores & sensitive files",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "60",
+      "name": "table-cred-files"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceFileEvents\n| where isnotempty(FileOriginUrl)\n| project TimeGenerated, DeviceName, FileName, FileOriginUrl, FolderPath, InitiatingProcessFileName, InitiatingProcessAccountName\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "Files downloaded from the internet",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "40",
+      "name": "table-downloaded-files"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔗 Lateral Movement — Cross-Device Logons" },
+      "name": "lateral-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceLogonEvents\n| where ActionType == 'LogonSuccess'\n| where LogonType in ('Network', 'RemoteInteractive')\n| where isnotempty(AccountName)\n| summarize\n    HopCount = dcount(DeviceName),\n    TargetDevices = make_set(DeviceName, 10)\n    by AccountName, AccountDomain\n| where HopCount > 1\n| sort by HopCount desc",
+        "size": 0,
+        "title": "Accounts logging into multiple devices — lateral movement candidates",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "HopCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 20 } }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "HopCount", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "100",
+      "name": "table-lateral-accounts"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceLogonEvents\n| where ActionType == 'LogonSuccess'\n| where LogonType == 'RemoteInteractive'\n| project TimeGenerated, AccountName, AccountDomain, DeviceName, RemoteDeviceName, RemoteIP, IsLocalAdmin\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "RDP logons — remote interactive sessions",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 },
+            {
+              "columnMatch": "IsLocalAdmin",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "true", "representation": "critical", "text": "Admin" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "success", "text": "User" }
+                ]
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-rdp-sessions"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let AlertDevices = SecurityAlert\n| where isnotempty(CompromisedEntity)\n| summarize by DeviceName = CompromisedEntity;\nDeviceLogonEvents\n| where ActionType == 'LogonSuccess'\n| where LogonType in ('Network', 'RemoteInteractive')\n| join kind=inner AlertDevices on DeviceName\n| summarize LogonCount = count() by AccountName, AccountDomain, DeviceName\n| sort by LogonCount desc\n| take 20",
+        "size": 0,
+        "title": "Logons on alerted devices — who accessed compromised machines",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "LogonCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 50 } }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-alerted-device-logons"
+    }
+  ],
+  "styleSettings": {},
+  "fromTemplateId": "",
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

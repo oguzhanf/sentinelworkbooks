@@ -1,0 +1,162 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": { "json": "# 🩺 SOC Health & Coverage\n---\nThe SOC is blind when a connector silently fails. This workbook tracks data source ingestion health, agent connectivity, Sentinel connector status, and ingestion latency. A silent failure here means missed detections across every other workbook." },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          { "id": "timeRange", "version": "KqlParameterItem/1.0", "name": "TimeRange", "type": 4, "isRequired": true, "value": { "durationMs": 86400000 }, "typeSettings": { "selectableValues": [{ "durationMs": 3600000 },{ "durationMs": 86400000 },{ "durationMs": 259200000 },{ "durationMs": 604800000 }], "allowCustom": true }, "label": "Time Range" }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 💓 Agent Heartbeat Health" },
+      "name": "heartbeat-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Heartbeat\n| summarize LastHeartbeat = max(TimeGenerated) by Computer, OSType, ComputerEnvironment\n| summarize\n    TotalAgents = count(),\n    OnlineAgents = countif(LastHeartbeat > ago(15m)),\n    WarningAgents = countif(LastHeartbeat between (ago(1h) .. ago(15m))),\n    OfflineAgents = countif(LastHeartbeat < ago(1h))\n| project TotalAgents, OnlineAgents, WarningAgents, OfflineAgents",
+        "size": 4, "title": "Agent health summary",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": { "showBorder": true, "titleContent": { "columnMatch": "", "formatter": 1 }, "leftContent": { "columnMatch": "OnlineAgents", "formatter": 12, "formatOptions": { "palette": "green" } } }
+      },
+      "customWidth": "100", "name": "kpi-agents"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Heartbeat\n| summarize LastHeartbeat = max(TimeGenerated) by Computer, OSType, ComputerEnvironment, Version\n| extend Status = case(\n    LastHeartbeat > ago(15m), 'Online',\n    LastHeartbeat > ago(1h), 'Warning',\n    'Offline'\n)\n| where Status != 'Online'\n| project Computer, OSType, ComputerEnvironment, Status, LastHeartbeat, Version\n| sort by LastHeartbeat asc",
+        "size": 0, "title": "Agents not recently seen — warning or offline",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "LastHeartbeat", "formatter": 6 },
+            {
+              "columnMatch": "Status",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "Offline", "representation": "error", "text": "{0}{1}" },
+                  { "operator": "==", "thresholdValue": "Warning", "representation": "warning", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "success", "text": "{0}{1}" }
+                ]
+              }
+            }
+          ], "filter": true, "sortBy": [{ "itemKey": "LastHeartbeat", "sortOrder": 1 }]
+        }
+      },
+      "customWidth": "60", "name": "table-offline-agents"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Heartbeat\n| summarize AgentCount = dcount(Computer) by OSType, ComputerEnvironment\n| sort by AgentCount desc",
+        "size": 3, "title": "Agent distribution by OS and environment",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "piechart"
+      },
+      "customWidth": "40", "name": "chart-agent-dist"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔌 Sentinel Connector Health" },
+      "name": "connector-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SentinelHealth\n| where SentinelResourceType == 'Data connector'\n| summarize LastEvent = max(TimeGenerated), LastStatus = arg_max(TimeGenerated, Status) by SentinelResourceName, SentinelResourceKind\n| project SentinelResourceName, SentinelResourceKind, LastStatus = tostring(LastStatus.Status), LastEvent\n| sort by LastEvent asc",
+        "size": 0, "title": "Connector health — last status per connector",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "LastEvent", "formatter": 6 },
+            {
+              "columnMatch": "LastStatus",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "Success", "representation": "success", "text": "{0}{1}" },
+                  { "operator": "==", "thresholdValue": "Failure", "representation": "error", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "warning", "text": "{0}{1}" }
+                ]
+              }
+            }
+          ], "filter": true
+        }
+      },
+      "customWidth": "60", "name": "table-connector-health"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SentinelHealth\n| where SentinelResourceType == 'Data connector'\n| where Status == 'Failure'\n| project TimeGenerated, SentinelResourceName, SentinelResourceKind, Reason, Description\n| sort by TimeGenerated desc\n| take 20",
+        "size": 0, "title": "Connector failures",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "TimeGenerated", "formatter": 6 }], "filter": true }
+      },
+      "customWidth": "40", "name": "table-connector-failures"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 📊 Data Source Ingestion Volume" },
+      "name": "ingestion-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "union withsource=TableName\n    (CommonSecurityLog | summarize EventCount = count() by TableName = 'CommonSecurityLog', bin(TimeGenerated, 1h)),\n    (Syslog | summarize EventCount = count() by TableName = 'Syslog', bin(TimeGenerated, 1h)),\n    (SecurityEvent | summarize EventCount = count() by TableName = 'SecurityEvent', bin(TimeGenerated, 1h)),\n    (W3CIISLog | summarize EventCount = count() by TableName = 'W3CIISLog', bin(TimeGenerated, 1h)),\n    (AzureActivity | summarize EventCount = count() by TableName = 'AzureActivity', bin(TimeGenerated, 1h))\n| sort by TimeGenerated asc",
+        "size": 3, "title": "Ingestion volume per table over time",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "linechart",
+        "chartSettings": { "showLegend": true }
+      },
+      "customWidth": "100", "name": "chart-ingestion-volume"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let Tables = datatable(TableName: string)[\n    'CommonSecurityLog', 'Syslog', 'SecurityEvent', 'W3CIISLog',\n    'AzureActivity', 'AuditLogs', 'SigninLogs', 'Heartbeat'\n];\nTables\n| extend LastSeen = toscalar(\n    union withsource=T\n        (CommonSecurityLog | where TableName == 'CommonSecurityLog' | summarize max(TimeGenerated)),\n        (Syslog | where TableName == 'Syslog' | summarize max(TimeGenerated)),\n        (SecurityEvent | where TableName == 'SecurityEvent' | summarize max(TimeGenerated)),\n        (W3CIISLog | where TableName == 'W3CIISLog' | summarize max(TimeGenerated)),\n        (AzureActivity | where TableName == 'AzureActivity' | summarize max(TimeGenerated)),\n        (AuditLogs | where TableName == 'AuditLogs' | summarize max(TimeGenerated)),\n        (SigninLogs | where TableName == 'SigninLogs' | summarize max(TimeGenerated)),\n        (Heartbeat | where TableName == 'Heartbeat' | summarize max(TimeGenerated))\n    | summarize max(Column1)\n)",
+        "size": 4, "title": "Last event received per key table",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "filter": true }
+      },
+      "customWidth": "100", "name": "table-last-event"
+    }
+  ],
+  "styleSettings": {},
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

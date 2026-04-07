@@ -1,0 +1,120 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": { "json": "# 📤 Data Exfiltration Across Layers\n---\nDetects data leaving the organisation by correlating outbound proxy volume (Squid), large IIS responses, Entra audit anomalies, and Unix file access spikes. Any user appearing across multiple layers with unusual volume in the same time window is a high-confidence exfiltration signal." },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          { "id": "timeRange", "version": "KqlParameterItem/1.0", "name": "TimeRange", "type": 4, "isRequired": true, "value": { "durationMs": 604800000 }, "typeSettings": { "selectableValues": [{ "durationMs": 86400000 },{ "durationMs": 259200000 },{ "durationMs": 604800000 },{ "durationMs": 2592000000 }], "allowCustom": true }, "label": "Time Range" }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🌐 Proxy Outbound Volume (Squid)" },
+      "name": "proxy-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "CommonSecurityLog\n| where DeviceVendor has_any ('Squid', 'squid')\n| where isnotempty(SourceUserName)\n| summarize OutboundBytes = sum(SentBytes), RequestCount = count(), UniqueDestinations = dcount(DestinationHostName)\n    by UserId = SourceUserName\n| where OutboundBytes > 104857600\n| sort by OutboundBytes desc\n| take 20\n| extend OutboundMB = round(todouble(OutboundBytes) / 1048576, 1)",
+        "size": 0, "title": "Users with high proxy outbound volume (>100MB)",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "OutboundMB", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 1000 } },
+            { "columnMatch": "UniqueDestinations", "formatter": 4, "formatOptions": { "palette": "blue", "max": 100 } }
+          ], "filter": true, "sortBy": [{ "itemKey": "OutboundMB", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "50", "name": "table-proxy-volume"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "CommonSecurityLog\n| where DeviceVendor has_any ('Squid', 'squid')\n| where DestinationHostName has_any ('pastebin.com', 'paste.ee', 'mega.nz', 'anonfiles.com', 'transfer.sh', 'wetransfer.com', 'sendspace.com', 'dropbox.com', 'drive.google.com', 'onedrive.live.com')\n| project TimeGenerated, SourceUserName, SourceIP, DestinationHostName, RequestURL, SentBytes\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0, "title": "Proxy requests to file sharing / paste sites",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "TimeGenerated", "formatter": 6 }], "filter": true }
+      },
+      "customWidth": "50", "name": "table-proxy-suspicious"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🌐 Large Web Server Responses (IIS)" },
+      "name": "iis-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "W3CIISLog\n| where isnotempty(cIP)\n| where scBytes > 10485760\n| project TimeGenerated, cIP, csMethod, csUriStem, scStatus, scBytes, csUserName, Computer\n| extend ResponseMB = round(todouble(scBytes) / 1048576, 1)\n| sort by scBytes desc\n| take 50",
+        "size": 0, "title": "IIS responses > 10MB — large data transfers from web servers",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "ResponseMB", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 500 } },
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ], "filter": true
+        }
+      },
+      "customWidth": "100", "name": "table-iis-large"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔗 Cross-Layer Exfiltration Signal — Proxy + IIS + Unix" },
+      "name": "correlation-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let ProxyHeavyUsers = CommonSecurityLog\n| where DeviceVendor has_any ('Squid', 'squid')\n| where isnotempty(SourceUserName)\n| summarize ProxyBytes = sum(SentBytes) by UserId = tolower(SourceUserName)\n| where ProxyBytes > 52428800;\nlet LargeIISClients = W3CIISLog\n| where scBytes > 5242880\n| where isnotempty(cIP)\n| summarize IISBytes = sum(scBytes), IISRequests = count() by cIP;\nlet UnixFileCopy = Syslog\n| where SyslogMessage has_any ('cp ', 'scp ', 'rsync', 'tar ', 'sftp', 'ftp ')\n| where isnotempty(HostIP)\n| summarize UnixCopyEvents = count() by HostIP;\nlet EntraExport = AuditLogs\n| where OperationName in ('Export', 'Download user', 'Download report', 'Sync started')\n| summarize EntraExports = count()\n    by UserId = tolower(tostring(parse_json(tostring(InitiatedBy)).user.userPrincipalName));\nProxyHeavyUsers\n| join kind=leftouter (EntraExport) on UserId\n| project UserId, ProxyMB = round(todouble(ProxyBytes)/1048576, 1), EntraExports = coalesce(EntraExports, 0)\n| where ProxyMB > 50 or EntraExports > 0\n| sort by ProxyMB desc",
+        "size": 0, "title": "Multi-layer exfiltration signal — users with high proxy outbound AND Entra export activity",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "ProxyMB", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 1000 } },
+            { "columnMatch": "EntraExports", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 20 } }
+          ], "filter": true
+        }
+      },
+      "customWidth": "60", "name": "table-cross-layer"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Syslog\n| where SyslogMessage has_any ('cp ', 'scp ', 'rsync', 'tar czf', 'tar cz', 'zip ', 'sftp')\n| project TimeGenerated, HostName, HostIP, ProcessName, SyslogMessage\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0, "title": "Unix file copy / archive / transfer commands",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "TimeGenerated", "formatter": 6 }], "filter": true }
+      },
+      "customWidth": "40", "name": "table-unix-copy"
+    }
+  ],
+  "styleSettings": {},
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

@@ -1,0 +1,141 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": { "json": "# 🔐 Identity-to-Network Kill Chain\n---\nReconstructs the full access chain: NAC/RADIUS authentication → Windows logon → server access. Correlates Cisco ISE authentication events with SecurityEvent Windows logons and Syslog Unix activity from the same account and IP. A failed ISE auth followed by a successful Windows logon from a different IP is a credential relay attack." },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          { "id": "timeRange", "version": "KqlParameterItem/1.0", "name": "TimeRange", "type": 4, "isRequired": true, "value": { "durationMs": 86400000 }, "typeSettings": { "selectableValues": [{ "durationMs": 3600000 },{ "durationMs": 86400000 },{ "durationMs": 259200000 },{ "durationMs": 604800000 }], "allowCustom": true }, "label": "Time Range" }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔑 NAC / RADIUS Authentication (Cisco ISE)" },
+      "name": "ise-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "CommonSecurityLog\n| where DeviceVendor == 'Cisco' and DeviceProduct has 'ISE'\n| summarize\n    TotalAuths = count(),\n    PassedAuths = countif(DeviceAction has_any ('Passed', 'Pass', 'success', 'Success', 'allowed')),\n    FailedAuths = countif(DeviceAction has_any ('Failed', 'Fail', 'failure', 'Failure', 'denied', 'reject'))\n| project TotalAuths, PassedAuths, FailedAuths",
+        "size": 4, "title": "ISE authentication summary",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": { "showBorder": true, "titleContent": { "columnMatch": "", "formatter": 1 }, "leftContent": { "columnMatch": "TotalAuths", "formatter": 12, "formatOptions": { "palette": "blue" } } }
+      },
+      "customWidth": "100", "name": "kpi-ise"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "CommonSecurityLog\n| where DeviceVendor == 'Cisco' and DeviceProduct has 'ISE'\n| where DeviceAction has_any ('Failed', 'Fail', 'failure', 'Failure', 'denied', 'reject')\n| summarize FailCount = count() by SourceUserName, SourceIP\n| where FailCount > 5\n| sort by FailCount desc\n| take 20",
+        "size": 0, "title": "ISE authentication failures — accounts with >5 failures",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "FailCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 100 } }], "filter": true }
+      },
+      "customWidth": "50", "name": "table-ise-failures"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "CommonSecurityLog\n| where DeviceVendor == 'Cisco' and DeviceProduct has 'ISE'\n| summarize AuthCount = count() by bin(TimeGenerated, 1h), DeviceAction\n| sort by TimeGenerated asc",
+        "size": 3, "title": "ISE auth events over time",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "linechart"
+      },
+      "customWidth": "50", "name": "chart-ise-trend"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔗 Kill Chain: ISE Failed → Windows Logon Success (Credential Relay)" },
+      "name": "relay-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let ISEFailures = CommonSecurityLog\n| where DeviceVendor == 'Cisco' and DeviceProduct has 'ISE'\n| where DeviceAction has_any ('Failed', 'Fail', 'failure', 'Failure', 'denied', 'reject')\n| where isnotempty(SourceUserName)\n| summarize ISEFailCount = count(), ISEIPs = make_set(SourceIP, 5), LastISEFail = max(TimeGenerated)\n    by AccountName = tolower(SourceUserName);\nlet WinLogons = SecurityEvent\n| where EventID == 4624\n| where LogonType in (3, 10)\n| where isnotempty(TargetUserName)\n| where TargetUserName !has '$'\n| summarize WinLogonCount = count(), WinIPs = make_set(IpAddress, 5), LastWinLogon = max(TimeGenerated)\n    by AccountName = tolower(TargetUserName);\nISEFailures\n| join kind=inner WinLogons on AccountName\n| project AccountName, ISEFailCount, LastISEFail, ISEIPs, WinLogonCount, LastWinLogon, WinIPs\n| sort by ISEFailCount desc",
+        "size": 0, "title": "Accounts with ISE failures AND Windows network logon successes — potential credential relay",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "ISEFailCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 50 } },
+            { "columnMatch": "LastISEFail", "formatter": 6 },
+            { "columnMatch": "LastWinLogon", "formatter": 6 }
+          ], "filter": true
+        }
+      },
+      "customWidth": "100", "name": "table-relay-candidates"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🖥️ Windows → Unix Server Pivot Chain" },
+      "name": "pivot-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let WinAdmins = SecurityEvent\n| where EventID == 4624\n| where LogonType in (3, 10)\n| where isnotempty(TargetUserName) and TargetUserName !has '$'\n| where isnotempty(IpAddress) and IpAddress != '-' and IpAddress != '127.0.0.1'\n| summarize WinLogons = count() by AccountName = tolower(TargetUserName), SourceIP = IpAddress;\nlet UnixRoot = Syslog\n| where Facility == 'authpriv'\n| where SyslogMessage has_any ('sudo', 'su:', 'root', 'session opened for user root')\n| where isnotempty(HostIP)\n| summarize UnixEvents = count() by HostIP;\nWinAdmins\n| join kind=inner (UnixRoot | project SourceIP = HostIP, UnixEvents) on SourceIP\n| project AccountName, SourceIP, WinLogons, UnixEvents\n| sort by UnixEvents desc",
+        "size": 0, "title": "IPs that logged into Windows AND performed privileged Unix activity — lateral pivot",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "WinLogons", "formatter": 4, "formatOptions": { "palette": "blue", "max": 100 } },
+            { "columnMatch": "UnixEvents", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 50 } }
+          ], "filter": true
+        }
+      },
+      "customWidth": "60", "name": "table-win-unix-pivot"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityEvent\n| where EventID == 4625\n| summarize FailCount = count() by TargetUserName, IpAddress\n| where FailCount > 10\n| sort by FailCount desc\n| take 20",
+        "size": 0, "title": "Windows logon failures >10 — brute force candidates",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "FailCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 200 } }], "filter": true }
+      },
+      "customWidth": "40", "name": "table-win-failures"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Syslog\n| where Facility == 'authpriv'\n| where SyslogMessage has_any ('authentication failure', 'Failed password', 'Invalid user', 'FAILED LOGIN')\n| summarize SshFailCount = count() by HostName, HostIP\n| sort by SshFailCount desc\n| take 20",
+        "size": 0, "title": "Unix/Linux SSH & auth failures by host",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "SshFailCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 200 } }], "filter": true }
+      },
+      "customWidth": "100", "name": "table-unix-failures"
+    }
+  ],
+  "styleSettings": {},
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

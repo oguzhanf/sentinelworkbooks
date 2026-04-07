@@ -1,0 +1,383 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# 🛡️ Unified Security Posture\n---\nExecutive view across Microsoft Defender for Endpoint, Entra ID, and Defender for Cloud. All data is live — no refresh needed."
+      },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "timeRange",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "type": 4,
+            "isRequired": true,
+            "value": { "durationMs": 604800000 },
+            "typeSettings": {
+              "selectableValues": [
+                { "durationMs": 86400000 },
+                { "durationMs": 259200000 },
+                { "durationMs": 604800000 },
+                { "durationMs": 2592000000 }
+              ],
+              "allowCustom": true
+            },
+            "label": "Time Range"
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 📊 Alert Overview" },
+      "name": "alerts-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityAlert\n| summarize\n    Total = count(),\n    High = countif(AlertSeverity == 'High'),\n    Medium = countif(AlertSeverity == 'Medium'),\n    Low = countif(AlertSeverity == 'Low'),\n    Informational = countif(AlertSeverity == 'Informational')\n| project Total, High, Medium, Low, Informational",
+        "size": 4,
+        "title": "Alert counts by severity",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": { "columnMatch": "", "formatter": 1 },
+          "leftContent": {
+            "columnMatch": "Total",
+            "formatter": 12,
+            "formatOptions": { "palette": "blue" }
+          }
+        }
+      },
+      "customWidth": "100",
+      "name": "kpi-alerts"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityAlert\n| summarize AlertCount = count() by AlertSeverity\n| sort by AlertCount desc",
+        "size": 3,
+        "title": "Alerts by severity",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "piechart",
+        "chartSettings": {
+          "seriesLabelSettings": [
+            { "seriesName": "High", "color": "redBright" },
+            { "seriesName": "Medium", "color": "orange" },
+            { "seriesName": "Low", "color": "yellow" },
+            { "seriesName": "Informational", "color": "blue" }
+          ]
+        }
+      },
+      "customWidth": "33",
+      "name": "chart-severity"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityAlert\n| summarize AlertCount = count() by ProductName\n| sort by AlertCount desc\n| take 10",
+        "size": 3,
+        "title": "Alerts by product",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart"
+      },
+      "customWidth": "34",
+      "name": "chart-product"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityAlert\n| where AlertSeverity in ('High', 'Medium')\n| summarize AlertCount = count() by bin(TimeGenerated, 1d)\n| sort by TimeGenerated asc",
+        "size": 3,
+        "title": "High & medium alerts over time",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "linechart"
+      },
+      "customWidth": "33",
+      "name": "chart-trend"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🖥️ Endpoint Coverage" },
+      "name": "endpoint-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceInfo\n| summarize LastSeen = max(TimeGenerated), OnboardingStatus = take_any(OnboardingStatus), OSPlatform = take_any(OSPlatform), DeviceType = take_any(DeviceType), MachineGroup = take_any(MachineGroup), ExposureLevel = take_any(ExposureLevel) by DeviceId\n| summarize\n    TotalDevices = count(),\n    Onboarded = countif(OnboardingStatus == 'Onboarded'),\n    NotOnboarded = countif(OnboardingStatus != 'Onboarded'),\n    HighExposure = countif(ExposureLevel == 'High')\n| project TotalDevices, Onboarded, NotOnboarded, HighExposure",
+        "size": 4,
+        "title": "Device coverage summary",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": { "columnMatch": "", "formatter": 1 },
+          "leftContent": {
+            "columnMatch": "TotalDevices",
+            "formatter": 12,
+            "formatOptions": { "palette": "blue" }
+          }
+        }
+      },
+      "customWidth": "100",
+      "name": "kpi-devices"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceInfo\n| summarize LastSeen = max(TimeGenerated), OnboardingStatus = take_any(OnboardingStatus), OSPlatform = take_any(OSPlatform) by DeviceId\n| summarize DeviceCount = count() by OSPlatform, OnboardingStatus\n| sort by DeviceCount desc",
+        "size": 3,
+        "title": "Devices by OS & onboarding status",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart",
+        "chartSettings": { "showLegend": true }
+      },
+      "customWidth": "50",
+      "name": "chart-devices-os"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceInfo\n| summarize LastSeen = max(TimeGenerated), ExposureLevel = take_any(ExposureLevel), MachineGroup = take_any(MachineGroup), DeviceName = take_any(DeviceName) by DeviceId\n| where ExposureLevel == 'High'\n| project DeviceName, ExposureLevel, MachineGroup, LastSeen\n| sort by LastSeen desc\n| take 10",
+        "size": 0,
+        "title": "Top 10 high exposure devices",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "ExposureLevel",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "High", "representation": "critical", "text": "{0}{1}" },
+                  { "operator": "==", "thresholdValue": "Medium", "representation": "warning", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "success", "text": "{0}{1}" }
+                ]
+              }
+            },
+            { "columnMatch": "LastSeen", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-high-exposure"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔐 Identity Risk" },
+      "name": "identity-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SigninLogs\n| summarize\n    TotalSignins = count(),\n    FailedSignins = countif(ResultType != '0'),\n    RiskySignins = countif(RiskLevelDuringSignIn in ('high', 'medium')),\n    LegacyAuth = countif(ClientAppUsed in ('Exchange ActiveSync', 'IMAP4', 'MAPI', 'POP3', 'SMTP', 'Other clients'))\n| project TotalSignins, FailedSignins, RiskySignins, LegacyAuth",
+        "size": 4,
+        "title": "Sign-in summary",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": { "columnMatch": "", "formatter": 1 },
+          "leftContent": {
+            "columnMatch": "TotalSignins",
+            "formatter": 12,
+            "formatOptions": { "palette": "blue" }
+          }
+        }
+      },
+      "customWidth": "100",
+      "name": "kpi-identity"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SigninLogs\n| where RiskLevelDuringSignIn in ('high', 'medium')\n| summarize RiskySignins = count() by UserPrincipalName\n| sort by RiskySignins desc\n| take 10",
+        "size": 0,
+        "title": "Top 10 users with risky sign-ins",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "filter": true }
+      },
+      "customWidth": "50",
+      "name": "table-risky-users"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SigninLogs\n| where ClientAppUsed in ('Exchange ActiveSync', 'IMAP4', 'MAPI', 'POP3', 'SMTP', 'Other clients')\n| summarize LegacyAuthCount = count() by UserPrincipalName\n| sort by LegacyAuthCount desc\n| take 10",
+        "size": 0,
+        "title": "Top 10 users still using legacy authentication",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "filter": true }
+      },
+      "customWidth": "50",
+      "name": "table-legacy-auth"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## ☁️ Cloud Recommendations" },
+      "name": "cloud-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityRecommendation\n| where RecommendationState == 'Active'\n| summarize\n    Total = count(),\n    Critical = countif(RecommendationSeverity == 'High'),\n    Medium = countif(RecommendationSeverity == 'Medium'),\n    Low = countif(RecommendationSeverity == 'Low')\n| project Total, Critical, Medium, Low",
+        "size": 4,
+        "title": "Active recommendations",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": { "columnMatch": "", "formatter": 1 },
+          "leftContent": {
+            "columnMatch": "Total",
+            "formatter": 12,
+            "formatOptions": { "palette": "orange" }
+          }
+        }
+      },
+      "customWidth": "100",
+      "name": "kpi-recommendations"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityRecommendation\n| where RecommendationState == 'Active'\n| summarize DeviceCount = dcount(DeviceId) by RecommendationDisplayName, RecommendationSeverity\n| sort by DeviceCount desc\n| take 15",
+        "size": 0,
+        "title": "Top active recommendations by affected devices",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "RecommendationSeverity",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "High", "representation": "critical", "text": "{0}{1}" },
+                  { "operator": "==", "thresholdValue": "Medium", "representation": "warning", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "success", "text": "{0}{1}" }
+                ]
+              }
+            },
+            {
+              "columnMatch": "DeviceCount",
+              "formatter": 4,
+              "formatOptions": { "palette": "redGreen" }
+            }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "DeviceCount", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "100",
+      "name": "table-recommendations"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🚨 Recent High Severity Alerts" },
+      "name": "recent-alerts-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityAlert\n| where AlertSeverity == 'High'\n| project TimeGenerated, AlertName, ProductName, CompromisedEntity, Status, Tactics\n| sort by TimeGenerated desc\n| take 20",
+        "size": 0,
+        "title": "Recent high severity alerts",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 },
+            {
+              "columnMatch": "AlertSeverity",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "High", "representation": "critical", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "warning", "text": "{0}{1}" }
+                ]
+              }
+            }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "TimeGenerated", "sortOrder": 2 }]
+        }
+      },
+      "name": "table-recent-alerts"
+    }
+  ],
+  "styleSettings": {},
+  "fromTemplateId": "",
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

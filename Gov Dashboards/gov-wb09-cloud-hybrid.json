@@ -1,0 +1,120 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": { "json": "# ☁️ Cloud & Hybrid Threat Correlation\n---\nDetects attacks spanning both Azure and on-premises. An Azure resource deletion followed by on-prem admin logon from an unusual IP followed by firewall allow from that same IP = a cloud-pivoted attack in progress." },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          { "id": "timeRange", "version": "KqlParameterItem/1.0", "name": "TimeRange", "type": 4, "isRequired": true, "value": { "durationMs": 86400000 }, "typeSettings": { "selectableValues": [{ "durationMs": 3600000 },{ "durationMs": 86400000 },{ "durationMs": 259200000 },{ "durationMs": 604800000 }], "allowCustom": true }, "label": "Time Range" }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## ☁️ Azure Control Plane Activity" },
+      "name": "azure-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AzureActivity\n| summarize\n    TotalOps = count(),\n    FailedOps = countif(ActivityStatusValue == 'Failure'),\n    WriteOps = countif(ActivityStatusValue == 'Success' and OperationNameValue has_any ('write', 'create', 'delete', 'update', 'action')),\n    UniqueCallers = dcount(Caller)\n| project TotalOps, FailedOps, WriteOps, UniqueCallers",
+        "size": 4, "title": "Azure activity summary",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": { "showBorder": true, "titleContent": { "columnMatch": "", "formatter": 1 }, "leftContent": { "columnMatch": "TotalOps", "formatter": 12, "formatOptions": { "palette": "blue" } } }
+      },
+      "customWidth": "100", "name": "kpi-azure"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AzureActivity\n| where ActivityStatusValue == 'Success'\n| where OperationNameValue has_any ('delete', 'Delete')\n| project TimeGenerated, Caller, CallerIpAddress, OperationNameValue, ResourceGroup, _ResourceId\n| sort by TimeGenerated desc\n| take 30",
+        "size": 0, "title": "Azure resource deletions",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "TimeGenerated", "formatter": 6 }], "filter": true }
+      },
+      "customWidth": "50", "name": "table-azure-deletions"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AzureActivity\n| where ActivityStatusValue == 'Success'\n| where OperationNameValue has_any ('roleAssignments/write', 'vaults/secrets/write', 'networkSecurityGroups/securityRules/write', 'runCommand/action', 'Set federation')\n| project TimeGenerated, Caller, CallerIpAddress, OperationNameValue, ResourceGroup\n| sort by TimeGenerated desc\n| take 30",
+        "size": 0, "title": "High-risk Azure operations",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "TimeGenerated", "formatter": 6 }], "filter": true }
+      },
+      "customWidth": "50", "name": "table-azure-highrisk"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔗 Cloud-to-On-Prem Attack Pivot" },
+      "name": "pivot-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let AzureCallers = AzureActivity\n| where ActivityStatusValue == 'Success'\n| where OperationNameValue has_any ('write', 'delete', 'action')\n| where isnotempty(CallerIpAddress) and CallerIpAddress != ''\n| summarize AzureOpCount = count(), LastAzureOp = max(TimeGenerated)\n    by CallerIP = tostring(CallerIpAddress), Caller = tolower(Caller);\nlet OnPremLogons = SecurityEvent\n| where EventID == 4624\n| where LogonType in (3, 10)\n| where isnotempty(IpAddress) and IpAddress != '-' and IpAddress != '127.0.0.1'\n| summarize OnPremLogonCount = count(), LastOnPremLogon = max(TimeGenerated), Computers = make_set(Computer, 5)\n    by CallerIP = IpAddress;\nAzureCallers\n| join kind=inner OnPremLogons on CallerIP\n| project CallerIP, Caller, AzureOpCount, LastAzureOp, OnPremLogonCount, LastOnPremLogon, Computers\n| sort by AzureOpCount desc",
+        "size": 0, "title": "IPs that made Azure control plane changes AND logged into on-prem Windows — cloud-to-on-prem pivot",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "AzureOpCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 100 } },
+            { "columnMatch": "OnPremLogonCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 100 } },
+            { "columnMatch": "LastAzureOp", "formatter": 6 },
+            { "columnMatch": "LastOnPremLogon", "formatter": 6 }
+          ], "filter": true
+        }
+      },
+      "customWidth": "100", "name": "table-cloud-onprem-pivot"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let AzureCallerIPs = AzureActivity\n| where ActivityStatusValue == 'Success'\n| where OperationNameValue has_any ('write', 'delete', 'action')\n| where isnotempty(CallerIpAddress)\n| summarize by CallerIpAddress;\nCommonSecurityLog\n| where DeviceVendor in ('Fortinet', 'Palo Alto Networks', 'Cisco', 'Juniper')\n| where DeviceAction in ('allow', 'Allow', 'permit', 'Permit', 'accept', 'Accept')\n| where SourceIP in (AzureCallerIPs)\n| summarize FWAllowCount = count(), DestIPs = make_set(DestinationIP, 5) by SourceIP\n| sort by FWAllowCount desc",
+        "size": 0, "title": "Azure-active IPs also seen in on-prem firewall allows",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "FWAllowCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 1000 } }], "filter": true }
+      },
+      "customWidth": "50", "name": "table-azure-fw-overlap"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AuditLogs\n| where OperationName in ('Add member to role', 'Set federation settings on domain', 'Add application', 'Delete application')\n| extend InitiatedByUPN = tostring(parse_json(tostring(InitiatedBy)).user.userPrincipalName)\n| extend InitiatedBySP = tostring(parse_json(tostring(InitiatedBy)).app.displayName)\n| extend Actor = iff(isnotempty(InitiatedByUPN), InitiatedByUPN, InitiatedBySP)\n| project TimeGenerated, OperationName, Actor, Result, LoggedByService\n| sort by TimeGenerated desc\n| take 30",
+        "size": 0, "title": "Entra high-risk operations — role assignments, federation changes, app registrations",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "TimeGenerated", "formatter": 6 }], "filter": true }
+      },
+      "customWidth": "50", "name": "table-entra-highrisk"
+    }
+  ],
+  "styleSettings": {},
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

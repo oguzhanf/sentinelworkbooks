@@ -1,0 +1,123 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": { "json": "# 🕸️ Web Application Attack Chain\n---\nCorrelates WAF blocks/allows with web server error responses to detect successful exploitation. A WAF allow followed by application errors from the same IP is a confirmed attack that bypassed WAF rules." },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          { "id": "timeRange", "version": "KqlParameterItem/1.0", "name": "TimeRange", "type": 4, "isRequired": true, "value": { "durationMs": 86400000 }, "typeSettings": { "selectableValues": [{ "durationMs": 3600000 },{ "durationMs": 86400000 },{ "durationMs": 259200000 },{ "durationMs": 604800000 }], "allowCustom": true }, "label": "Time Range" }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🛡️ WAF Activity Overview (Fortinet WAF / F5)" },
+      "name": "waf-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "CommonSecurityLog\n| where DeviceVendor has_any ('Fortinet', 'F5') and DeviceProduct has_any ('WAF', 'BIG-IP', 'ASM', 'FortiWeb')\n| summarize\n    TotalEvents = count(),\n    Blocked = countif(DeviceAction in ('block', 'Block', 'deny', 'Deny', 'drop', 'Drop', 'reset', 'Reset')),\n    Allowed = countif(DeviceAction in ('allow', 'Allow', 'pass', 'Pass', 'permit', 'Permit')),\n    UniqueAttackIPs = dcount(SourceIP)\n| project TotalEvents, Blocked, Allowed, UniqueAttackIPs",
+        "size": 4, "title": "WAF summary",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": { "showBorder": true, "titleContent": { "columnMatch": "", "formatter": 1 }, "leftContent": { "columnMatch": "Blocked", "formatter": 12, "formatOptions": { "palette": "redBright" } } }
+      },
+      "customWidth": "100", "name": "kpi-waf"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "CommonSecurityLog\n| where DeviceVendor has_any ('Fortinet', 'F5') and DeviceProduct has_any ('WAF', 'BIG-IP', 'ASM', 'FortiWeb')\n| summarize AttackCount = count() by Activity\n| where isnotempty(Activity)\n| sort by AttackCount desc\n| take 15",
+        "size": 0, "title": "Top WAF attack signatures detected",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "AttackCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 1000 } }], "filter": true }
+      },
+      "customWidth": "50", "name": "table-waf-attacks"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "CommonSecurityLog\n| where DeviceVendor has_any ('Fortinet', 'F5') and DeviceProduct has_any ('WAF', 'BIG-IP', 'ASM', 'FortiWeb')\n| summarize AttackCount = count() by SourceIP\n| sort by AttackCount desc\n| take 15",
+        "size": 0, "title": "Top attacker IPs",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "AttackCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 1000 } }], "filter": true }
+      },
+      "customWidth": "50", "name": "table-waf-ips"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔴 WAF Allow → App Server Error (Successful Bypass)" },
+      "name": "bypass-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let WAFAllowed = CommonSecurityLog\n| where DeviceVendor has_any ('Fortinet', 'F5') and DeviceProduct has_any ('WAF', 'BIG-IP', 'ASM', 'FortiWeb')\n| where DeviceAction in ('allow', 'Allow', 'pass', 'Pass', 'permit', 'Permit')\n| where isnotempty(SourceIP)\n| summarize WAFAllowCount = count(), AllowedURI = make_set(RequestURL, 5) by SourceIP;\nlet AppErrors = W3CIISLog\n| where scStatus startswith '5'\n| where isnotempty(cIP)\n| summarize ServerErrors = count(), ErrorURIs = make_set(csUriStem, 5) by cIP;\nWAFAllowed\n| join kind=inner (AppErrors | project SourceIP = cIP, ServerErrors, ErrorURIs) on SourceIP\n| project SourceIP, WAFAllowCount, AllowedURI, ServerErrors, ErrorURIs\n| sort by ServerErrors desc",
+        "size": 0, "title": "IPs allowed by WAF that triggered server-side errors — potential successful exploitation",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "WAFAllowCount", "formatter": 4, "formatOptions": { "palette": "blue", "max": 1000 } },
+            { "columnMatch": "ServerErrors", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 200 } }
+          ], "filter": true
+        }
+      },
+      "customWidth": "100", "name": "table-waf-bypass"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 📋 Web Server Error Analysis (IIS + Syslog Apache/Nginx)" },
+      "name": "webserver-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "W3CIISLog\n| where scStatus startswith '4' or scStatus startswith '5'\n| summarize ErrorCount = count() by scStatus, csUriStem\n| sort by ErrorCount desc\n| take 20",
+        "size": 0, "title": "IIS error codes and affected URIs",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "ErrorCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 1000 } }], "filter": true }
+      },
+      "customWidth": "50", "name": "table-iis-errors"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Syslog\n| where ProcessName in ('apache2', 'httpd', 'nginx', 'apache')\n| where SyslogMessage has_any ('error', 'critical', 'alert', 'emerg', 'SQL', 'injection', 'XSS', 'traversal', 'exec')\n| project TimeGenerated, HostName, ProcessName, SyslogMessage\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0, "title": "Apache/Nginx error and attack log entries",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "TimeGenerated", "formatter": 6 }], "filter": true }
+      },
+      "customWidth": "50", "name": "table-apache-errors"
+    }
+  ],
+  "styleSettings": {},
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

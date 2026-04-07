@@ -1,0 +1,464 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# 🖥️ Endpoint Health & Coverage\n---\nShows the state of MDE deployment across the device fleet. Identifies devices not onboarded, patch and exposure gaps, the most alert-heavy devices, and Windows server security event anomalies. Designed for both SOC and IT operations audiences."
+      },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "timeRange",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "type": 4,
+            "isRequired": true,
+            "value": { "durationMs": 2592000000 },
+            "typeSettings": {
+              "selectableValues": [
+                { "durationMs": 604800000 },
+                { "durationMs": 2592000000 },
+                { "durationMs": 7776000000 }
+              ],
+              "allowCustom": true
+            },
+            "label": "Time Range"
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 📊 Fleet Overview" },
+      "name": "fleet-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceInfo\n| summarize LastSeen = max(TimeGenerated), OnboardingStatus = take_any(OnboardingStatus), OSPlatform = take_any(OSPlatform), ExposureLevel = take_any(ExposureLevel), SensorHealthState = take_any(SensorHealthState) by DeviceId\n| summarize\n    TotalDevices = count(),\n    Onboarded = countif(OnboardingStatus == 'Onboarded'),\n    NotOnboarded = countif(OnboardingStatus != 'Onboarded'),\n    HighExposure = countif(ExposureLevel == 'High'),\n    SensorUnhealthy = countif(SensorHealthState != 'Active' and isnotempty(SensorHealthState))\n| project TotalDevices, Onboarded, NotOnboarded, HighExposure, SensorUnhealthy",
+        "size": 4,
+        "title": "Device fleet summary",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": { "columnMatch": "", "formatter": 1 },
+          "leftContent": { "columnMatch": "TotalDevices", "formatter": 12, "formatOptions": { "palette": "blue" } }
+        }
+      },
+      "customWidth": "100",
+      "name": "kpi-fleet"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceInfo\n| summarize LastSeen = max(TimeGenerated), OnboardingStatus = take_any(OnboardingStatus), OSPlatform = take_any(OSPlatform) by DeviceId\n| summarize DeviceCount = count() by OSPlatform, OnboardingStatus\n| sort by DeviceCount desc",
+        "size": 3,
+        "title": "Devices by OS & onboarding status",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart",
+        "chartSettings": { "showLegend": true }
+      },
+      "customWidth": "50",
+      "name": "chart-os-onboarding"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceInfo\n| summarize LastSeen = max(TimeGenerated), ExposureLevel = take_any(ExposureLevel) by DeviceId\n| summarize DeviceCount = count() by ExposureLevel\n| where isnotempty(ExposureLevel)",
+        "size": 3,
+        "title": "Devices by exposure level",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "piechart",
+        "chartSettings": {
+          "seriesLabelSettings": [
+            { "seriesName": "High", "color": "redBright" },
+            { "seriesName": "Medium", "color": "orange" },
+            { "seriesName": "Low", "color": "green" }
+          ]
+        }
+      },
+      "customWidth": "25",
+      "name": "chart-exposure"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceInfo\n| summarize LastSeen = max(TimeGenerated), SensorHealthState = take_any(SensorHealthState), DeviceName = take_any(DeviceName), OSPlatform = take_any(OSPlatform), MachineGroup = take_any(MachineGroup) by DeviceId\n| where SensorHealthState != 'Active' and isnotempty(SensorHealthState)\n| project DeviceName, SensorHealthState, OSPlatform, MachineGroup, LastSeen\n| sort by LastSeen desc",
+        "size": 0,
+        "title": "Devices with unhealthy MDE sensor",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "SensorHealthState",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "Active", "representation": "success", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "error", "text": "{0}{1}" }
+                ]
+              }
+            },
+            { "columnMatch": "LastSeen", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "25",
+      "name": "table-unhealthy-sensors"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## ❌ Devices NOT Onboarded" },
+      "name": "not-onboarded-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceInfo\n| summarize LastSeen = max(TimeGenerated), OnboardingStatus = take_any(OnboardingStatus), OSPlatform = take_any(OSPlatform), OSVersion = take_any(OSVersion), DeviceType = take_any(DeviceType), MachineGroup = take_any(MachineGroup), DeviceName = take_any(DeviceName), PublicIP = take_any(PublicIP) by DeviceId\n| where OnboardingStatus != 'Onboarded'\n| project DeviceName, OnboardingStatus, OSPlatform, OSVersion, DeviceType, MachineGroup, LastSeen, PublicIP\n| sort by LastSeen desc",
+        "size": 0,
+        "title": "Not onboarded device list",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "OnboardingStatus",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "Onboarded", "representation": "success", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "error", "text": "{0}{1}" }
+                ]
+              }
+            },
+            { "columnMatch": "LastSeen", "formatter": 6 }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "LastSeen", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "100",
+      "name": "table-not-onboarded"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔓 Vulnerability & Exposure\n\n> **Note:** The `SecurityRecommendation` table requires the **Microsoft Defender for Cloud** or **MDVM** connector to be enabled. If recommendations show 0, enable the connector in Sentinel → Data connectors → Microsoft Defender for Cloud. The exposure level charts below use `DeviceInfo` which is always available." },
+      "name": "vuln-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceInfo\n| summarize LastSeen = max(TimeGenerated), ExposureLevel = max(ExposureLevel) by DeviceId\n| where isnotempty(ExposureLevel)\n| summarize\n    HighExposure = countif(ExposureLevel == 'High'),\n    MediumExposure = countif(ExposureLevel == 'Medium'),\n    LowExposure = countif(ExposureLevel == 'Low'),\n    TotalWithExposure = count()\n| project TotalWithExposure, HighExposure, MediumExposure, LowExposure",
+        "size": 4,
+        "title": "Device exposure summary (from DeviceInfo)",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": { "columnMatch": "", "formatter": 1 },
+          "leftContent": { "columnMatch": "HighExposure", "formatter": 12, "formatOptions": { "palette": "redBright" } }
+        }
+      },
+      "customWidth": "100",
+      "name": "kpi-exposure-fallback"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityRecommendation\n| where RecommendationState == 'Active'\n| summarize\n    TotalRecs = count(),\n    HighRecs = countif(RecommendationSeverity == 'High'),\n    MedRecs = countif(RecommendationSeverity == 'Medium'),\n    AffectedDevices = dcount(DeviceId)\n| project TotalRecs, HighRecs, MedRecs, AffectedDevices",
+        "size": 4,
+        "title": "Active vulnerability recommendations (requires Defender for Cloud connector)",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": { "columnMatch": "", "formatter": 1 },
+          "leftContent": { "columnMatch": "TotalRecs", "formatter": 12, "formatOptions": { "palette": "orange" } }
+        }
+      },
+      "customWidth": "100",
+      "name": "kpi-vuln"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityRecommendation\n| where RecommendationState == 'Active'\n| summarize AffectedDevices = dcount(DeviceId) by RecommendationDisplayName, RecommendationSeverity\n| sort by AffectedDevices desc\n| take 15",
+        "size": 0,
+        "title": "Top active recommendations by affected devices",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "RecommendationSeverity",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "High", "representation": "critical", "text": "{0}{1}" },
+                  { "operator": "==", "thresholdValue": "Medium", "representation": "warning", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "success", "text": "{0}{1}" }
+                ]
+              }
+            },
+            { "columnMatch": "AffectedDevices", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 100 } }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "AffectedDevices", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "60",
+      "name": "table-top-recs"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceInfo\n| summarize LastSeen = max(TimeGenerated), ExposureLevel = take_any(ExposureLevel), MachineGroup = take_any(MachineGroup), OSPlatform = take_any(OSPlatform), DeviceName = take_any(DeviceName) by DeviceId\n| where ExposureLevel == 'High'\n| project DeviceName, ExposureLevel, OSPlatform, MachineGroup, LastSeen\n| sort by LastSeen desc\n| take 20",
+        "size": 0,
+        "title": "High exposure devices",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "ExposureLevel",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "High", "representation": "critical", "text": "{0}{1}" },
+                  { "operator": "==", "thresholdValue": "Medium", "representation": "warning", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "success", "text": "{0}{1}" }
+                ]
+              }
+            },
+            { "columnMatch": "LastSeen", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "40",
+      "name": "table-high-exposure"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🚨 Alert Density by Device" },
+      "name": "alert-density-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityAlert\n| where isnotempty(CompromisedEntity)\n| summarize\n    TotalAlerts = count(),\n    HighAlerts = countif(AlertSeverity == 'High'),\n    MedAlerts = countif(AlertSeverity == 'Medium'),\n    UniqueAlertTypes = dcount(AlertName)\n    by DeviceName = CompromisedEntity\n| sort by TotalAlerts desc\n| take 20",
+        "size": 0,
+        "title": "Most alerted devices",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TotalAlerts", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 50 } },
+            { "columnMatch": "HighAlerts", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 20 } }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "TotalAlerts", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "60",
+      "name": "table-alert-density"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityAlert\n| summarize AlertCount = count() by AlertSeverity\n| sort by AlertCount desc",
+        "size": 3,
+        "title": "Alert distribution by severity",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "piechart",
+        "chartSettings": {
+          "seriesLabelSettings": [
+            { "seriesName": "High", "color": "redBright" },
+            { "seriesName": "Medium", "color": "orange" },
+            { "seriesName": "Low", "color": "yellow" },
+            { "seriesName": "Informational", "color": "blue" }
+          ]
+        }
+      },
+      "customWidth": "40",
+      "name": "chart-alert-severity"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔗 Cross-Layer: Devices with Alerts AND High Exposure" },
+      "name": "correlation-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let RecommendedDevices = SecurityRecommendation\n| where RecommendationState == 'Active' and RecommendationSeverity == 'High'\n| summarize HighRecs = dcount(RecommendationName) by DeviceId;\nDeviceInfo\n| summarize LastSeen = max(TimeGenerated), ExposureLevel = max(ExposureLevel), OSPlatform = max(OSPlatform), MachineGroup = max(MachineGroup), DeviceName = max(DeviceName) by DeviceId\n| where ExposureLevel in ('High', 'Medium')\n| join kind=leftouter (\n    SecurityAlert\n    | where isnotempty(CompromisedEntity)\n    | summarize AlertCount = count(), HighAlerts = countif(AlertSeverity == 'High') by CompromisedEntity\n) on $left.DeviceName == $right.CompromisedEntity\n| join kind=leftouter RecommendedDevices on DeviceId\n| project DeviceName, ExposureLevel, OSPlatform, MachineGroup, AlertCount = coalesce(AlertCount, 0), HighAlerts = coalesce(HighAlerts, 0), HighRecs = coalesce(HighRecs, 0), LastSeen\n| where AlertCount > 0 or HighRecs > 0\n| sort by AlertCount desc",
+        "size": 0,
+        "title": "Devices with both active alerts and high vulnerability recommendations",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "ExposureLevel",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "High", "representation": "critical", "text": "{0}{1}" },
+                  { "operator": "==", "thresholdValue": "Medium", "representation": "warning", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "success", "text": "{0}{1}" }
+                ]
+              }
+            },
+            { "columnMatch": "AlertCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 50 } },
+            { "columnMatch": "HighRecs", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 20 } },
+            { "columnMatch": "LastSeen", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "100",
+      "name": "table-correlation"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🪟 Windows Server Security Events" },
+      "name": "server-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityEvent\n| where EventID in (4624, 4625, 4648, 4720, 4722, 4723, 4724, 4725, 4726, 4728, 4732, 4756)\n| summarize\n    SuccessLogons = countif(EventID == 4624),\n    FailedLogons = countif(EventID == 4625),\n    ExplicitCreds = countif(EventID == 4648),\n    AccountCreated = countif(EventID == 4720),\n    AccountEnabled = countif(EventID == 4722),\n    AccountDeleted = countif(EventID == 4726),\n    GroupMemberAdded = countif(EventID in (4728, 4732, 4756))\n| project SuccessLogons, FailedLogons, ExplicitCreds, AccountCreated, AccountDeleted, GroupMemberAdded",
+        "size": 4,
+        "title": "Windows server event summary",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": { "columnMatch": "", "formatter": 1 },
+          "leftContent": { "columnMatch": "SuccessLogons", "formatter": 12, "formatOptions": { "palette": "blue" } }
+        }
+      },
+      "customWidth": "100",
+      "name": "kpi-security-events"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityEvent\n| where EventID in (4720, 4726, 4728, 4732, 4756)\n| project TimeGenerated, EventID, Account, TargetUserName, TargetDomainName, Computer\n| extend EventDescription = case(\n    EventID == 4720, 'Account created',\n    EventID == 4726, 'Account deleted',\n    EventID == 4728, 'Member added to global group',\n    EventID == 4732, 'Member added to local group',\n    EventID == 4756, 'Member added to universal group',\n    'Other'\n)\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "Account & group changes on servers",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "TimeGenerated", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "50",
+      "name": "table-account-changes"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityEvent\n| where EventID == 4625\n| summarize FailedCount = count() by TargetUserName, IpAddress, Computer\n| where FailedCount > 10\n| sort by FailedCount desc\n| take 20",
+        "size": 0,
+        "title": "Accounts with >10 failed logons on servers",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "FailedCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 100 } }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "FailedCount", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "50",
+      "name": "table-server-logon-failures"
+    }
+  ],
+  "styleSettings": {},
+  "fromTemplateId": "",
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

@@ -1,0 +1,124 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": { "json": "# 👑 Privileged Account Abuse Across Systems\n---\nAn account touching Windows servers, Unix servers, network infrastructure, and Azure in a 30-minute window is either a breach or a misconfiguration. Correlates admin activity across SecurityEvent, Syslog, CommonSecurityLog, and AuditLogs." },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          { "id": "timeRange", "version": "KqlParameterItem/1.0", "name": "TimeRange", "type": 4, "isRequired": true, "value": { "durationMs": 86400000 }, "typeSettings": { "selectableValues": [{ "durationMs": 3600000 },{ "durationMs": 86400000 },{ "durationMs": 259200000 },{ "durationMs": 604800000 }], "allowCustom": true }, "label": "Time Range" }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔑 Windows Privileged Activity" },
+      "name": "win-priv-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityEvent\n| where EventID in (4728, 4732, 4756, 4720, 4726, 4648, 4672)\n| extend EventDescription = case(\n    EventID == 4728, 'Member added to global group',\n    EventID == 4732, 'Member added to local admin group',\n    EventID == 4756, 'Member added to universal group',\n    EventID == 4720, 'New account created',\n    EventID == 4726, 'Account deleted',\n    EventID == 4648, 'Explicit credentials used',\n    EventID == 4672, 'Special privileges assigned',\n    'Other'\n)\n| project TimeGenerated, EventID, EventDescription, SubjectUserName, TargetUserName, Computer\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0, "title": "Windows privileged operations — group changes, new accounts, explicit credentials",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "TimeGenerated", "formatter": 6 }], "filter": true }
+      },
+      "customWidth": "60", "name": "table-win-priv"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityEvent\n| where EventID == 4672\n| summarize Count = count() by SubjectUserName\n| sort by Count desc\n| take 15",
+        "size": 0, "title": "Accounts with most special privilege assignments",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "Count", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 100 } }], "filter": true }
+      },
+      "customWidth": "40", "name": "table-special-priv"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🐧 Unix Root / Sudo Activity" },
+      "name": "unix-priv-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Syslog\n| where Facility == 'authpriv'\n| where SyslogMessage has_any ('sudo:', 'su:', 'root', 'COMMAND=', 'session opened for user root')\n| project TimeGenerated, HostName, HostIP, SyslogMessage\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0, "title": "Unix sudo / su / root session activity",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "TimeGenerated", "formatter": 6 }], "filter": true }
+      },
+      "customWidth": "60", "name": "table-unix-root"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Syslog\n| where Facility == 'authpriv'\n| where SyslogMessage has 'COMMAND='\n| extend SudoUser = extract(@'(\\S+) : TTY', 1, SyslogMessage)\n| summarize SudoCount = count() by HostName, SudoUser\n| where SudoCount > 5\n| sort by SudoCount desc",
+        "size": 0, "title": "Accounts with high sudo command count",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "SudoCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 50 } }], "filter": true }
+      },
+      "customWidth": "40", "name": "table-sudo-count"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔗 Cross-System Admin Activity — Same Account, Multiple Layers" },
+      "name": "cross-priv-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let WinAdmins = SecurityEvent\n| where EventID in (4672, 4728, 4732, 4648)\n| where isnotempty(SubjectUserName) and SubjectUserName !has '$'\n| summarize WinPrivEvents = count() by AccountName = tolower(SubjectUserName);\nlet EntraAdmins = AuditLogs\n| where OperationName in ('Add member to role', 'Add application', 'Delete user', 'Reset user password')\n| extend Actor = tolower(tostring(parse_json(tostring(InitiatedBy)).user.userPrincipalName))\n| where isnotempty(Actor)\n| summarize EntraPrivEvents = count() by AccountName = Actor;\nWinAdmins\n| join kind=inner EntraAdmins on AccountName\n| project AccountName, WinPrivEvents, EntraPrivEvents\n| extend TotalPrivEvents = WinPrivEvents + EntraPrivEvents\n| sort by TotalPrivEvents desc",
+        "size": 0, "title": "Accounts with privileged activity on BOTH Windows and Entra — high-privilege accounts to monitor",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "WinPrivEvents", "formatter": 4, "formatOptions": { "palette": "blue", "max": 100 } },
+            { "columnMatch": "EntraPrivEvents", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 100 } },
+            { "columnMatch": "TotalPrivEvents", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 200 } }
+          ], "filter": true
+        }
+      },
+      "customWidth": "60", "name": "table-cross-priv"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "CommonSecurityLog\n| where DeviceVendor == 'Cisco' and DeviceProduct has 'ISE'\n| where SourceUserName has_any ('admin', 'root', 'administrator', 'superuser', 'sysadmin')\n| project TimeGenerated, SourceUserName, SourceIP, DeviceAction, Activity\n| sort by TimeGenerated desc\n| take 30",
+        "size": 0, "title": "Privileged account NAC/ISE authentications",
+        "timeContext": { "durationMs": 0 }, "timeContextFromParameter": "TimeRange",
+        "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": { "formatters": [{ "columnMatch": "TimeGenerated", "formatter": 6 }], "filter": true }
+      },
+      "customWidth": "40", "name": "table-ise-priv"
+    }
+  ],
+  "styleSettings": {},
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

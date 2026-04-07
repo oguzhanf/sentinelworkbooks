@@ -1,0 +1,505 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# 🔐 Identity Attack Chain\n---\nTraces identity activity across every layer — from Entra cloud sign-ins through on-premises Active Directory to endpoint logons. Use this workbook to understand the full scope of a user's activity or to detect lateral movement and credential-based attacks."
+      },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "timeRange",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "type": 4,
+            "isRequired": true,
+            "value": { "durationMs": 604800000 },
+            "typeSettings": {
+              "selectableValues": [
+                { "durationMs": 86400000 },
+                { "durationMs": 259200000 },
+                { "durationMs": 604800000 },
+                { "durationMs": 2592000000 }
+              ],
+              "allowCustom": true
+            },
+            "label": "Time Range"
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 📊 Identity Overview" },
+      "name": "overview-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SigninLogs\n| summarize\n    TotalSignins = count(),\n    FailedSignins = countif(ResultType != '0'),\n    RiskySignins = countif(RiskLevelDuringSignIn in ('high', 'medium')),\n    UniqueUsers = dcount(UserPrincipalName),\n    UniqueLocations = dcount(Location)\n| project TotalSignins, FailedSignins, RiskySignins, UniqueUsers, UniqueLocations",
+        "size": 4,
+        "title": "Sign-in summary (interactive)",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": { "columnMatch": "", "formatter": 1 },
+          "leftContent": {
+            "columnMatch": "TotalSignins",
+            "formatter": 12,
+            "formatOptions": { "palette": "blue" }
+          }
+        }
+      },
+      "customWidth": "100",
+      "name": "kpi-signins"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SigninLogs\n| where ResultType != '0'\n| summarize FailedCount = count() by bin(TimeGenerated, 1d)\n| sort by TimeGenerated asc",
+        "size": 3,
+        "title": "Failed sign-ins over time",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "linechart"
+      },
+      "customWidth": "50",
+      "name": "chart-failed-trend"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SigninLogs\n| summarize SigninCount = count() by Location\n| where isnotempty(Location)\n| sort by SigninCount desc\n| take 10",
+        "size": 3,
+        "title": "Top 10 sign-in locations",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart"
+      },
+      "customWidth": "50",
+      "name": "chart-locations"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## ⚠️ Risky Sign-ins & Anomalies" },
+      "name": "risky-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SigninLogs\n| where RiskLevelDuringSignIn in ('high', 'medium')\n| project\n    TimeGenerated,\n    UserPrincipalName,\n    IPAddress,\n    Location,\n    AppDisplayName,\n    RiskLevelDuringSignIn,\n    RiskState,\n    RiskEventTypes_V2,\n    ResultType,\n    ConditionalAccessStatus\n| sort by TimeGenerated desc",
+        "size": 0,
+        "title": "Risky interactive sign-ins",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "RiskLevelDuringSignIn",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "high", "representation": "critical", "text": "{0}{1}" },
+                  { "operator": "==", "thresholdValue": "medium", "representation": "warning", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "success", "text": "{0}{1}" }
+                ]
+              }
+            },
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "TimeGenerated", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "100",
+      "name": "table-risky-signins"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AADNonInteractiveUserSignInLogs\n| where RiskLevelDuringSignIn in ('high', 'medium')\n| project\n    TimeGenerated,\n    UserPrincipalName,\n    IPAddress,\n    AppDisplayName,\n    RiskLevelDuringSignIn,\n    RiskState,\n    ResultType,\n    ClientAppUsed\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "Risky non-interactive sign-ins",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "RiskLevelDuringSignIn",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "high", "representation": "critical", "text": "{0}{1}" },
+                  { "operator": "==", "thresholdValue": "medium", "representation": "warning", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "success", "text": "{0}{1}" }
+                ]
+              }
+            },
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "100",
+      "name": "table-risky-noninteractive"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔑 Entra Directory Changes" },
+      "name": "directory-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AuditLogs\n| where OperationName in (\n    'Add member to role',\n    'Remove member from role',\n    'Add user',\n    'Delete user',\n    'Reset user password',\n    'Change user password',\n    'Add group',\n    'Delete group',\n    'Add member to group',\n    'Remove member from group',\n    'Add application',\n    'Add service principal'\n)\n| extend InitiatedByUser = tostring(parse_json(tostring(InitiatedBy)).user.userPrincipalName)\n| extend InitiatedByApp = tostring(parse_json(tostring(InitiatedBy)).app.displayName)\n| extend Actor = iff(isnotempty(InitiatedByUser), InitiatedByUser, InitiatedByApp)\n| project TimeGenerated, OperationName, ActivityDisplayName, Actor, Result, TargetResources\n| sort by TimeGenerated desc\n| take 100",
+        "size": 0,
+        "title": "Sensitive directory changes",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Result",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "success", "representation": "success", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "error", "text": "{0}{1}" }
+                ]
+              }
+            },
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "TimeGenerated", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "100",
+      "name": "table-directory-changes"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AuditLogs\n| where OperationName in ('Add member to role', 'Remove member from role')\n| extend InitiatedByUser = tostring(parse_json(tostring(InitiatedBy)).user.userPrincipalName)\n| extend InitiatedByApp = tostring(parse_json(tostring(InitiatedBy)).app.displayName)\n| extend Actor = iff(isnotempty(InitiatedByUser), InitiatedByUser, InitiatedByApp)\n| summarize ChangeCount = count() by OperationName, Actor\n| sort by ChangeCount desc",
+        "size": 3,
+        "title": "Role assignment changes by actor",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart"
+      },
+      "customWidth": "50",
+      "name": "chart-role-changes"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AuditLogs\n| summarize ChangeCount = count() by ActivityDisplayName\n| sort by ChangeCount desc\n| take 10",
+        "size": 3,
+        "title": "Top 10 audit operations",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart"
+      },
+      "customWidth": "50",
+      "name": "chart-top-operations"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🏢 On-Premises Identity Activity (MDI)" },
+      "name": "onprem-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "IdentityLogonEvents\n| summarize\n    TotalLogons = count(),\n    FailedLogons = countif(ActionType == 'LogonFailed'),\n    LDAPCleartext = countif(Protocol == 'LDAP' and ActionType == 'LogonSuccess'),\n    NTLMLogons = countif(Protocol == 'Ntlm')\n| project TotalLogons, FailedLogons, LDAPCleartext, NTLMLogons",
+        "size": 4,
+        "title": "On-premises authentication summary",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": { "columnMatch": "", "formatter": 1 },
+          "leftContent": {
+            "columnMatch": "TotalLogons",
+            "formatter": 12,
+            "formatOptions": { "palette": "blue" }
+          }
+        }
+      },
+      "customWidth": "100",
+      "name": "kpi-onprem"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "IdentityLogonEvents\n| where ActionType == 'LogonFailed'\n| summarize FailedCount = count() by AccountUpn, IPAddress\n| where FailedCount > 5\n| sort by FailedCount desc\n| take 20",
+        "size": 0,
+        "title": "On-premises logon failures (>5 attempts) — potential brute force",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "FailedCount",
+              "formatter": 4,
+              "formatOptions": { "palette": "redGreen", "max": 50 }
+            }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "FailedCount", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "50",
+      "name": "table-onprem-failures"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "IdentityDirectoryEvents\n| where ActionType in (\n    'Account Password changed',\n    'Account Password reset',\n    'Account Locked',\n    'Account Disabled',\n    'Group Membership changed',\n    'Sensitive Group Membership changed'\n)\n| project TimeGenerated, ActionType, AccountUpn, TargetAccountUpn, AccountDisplayName, DeviceName\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "Sensitive AD directory events",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "TimeGenerated", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "50",
+      "name": "table-directory-events"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🖥️ Endpoint Logon Activity" },
+      "name": "endpoint-logon-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceLogonEvents\n| where ActionType == 'LogonFailed'\n| summarize FailedCount = count() by AccountName, AccountDomain, DeviceName\n| where FailedCount > 5\n| sort by FailedCount desc\n| take 20",
+        "size": 0,
+        "title": "Endpoint logon failures (>5 attempts)",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "FailedCount",
+              "formatter": 4,
+              "formatOptions": { "palette": "redGreen", "max": 50 }
+            }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "FailedCount", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "50",
+      "name": "table-device-failures"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceLogonEvents\n| where ActionType == 'LogonSuccess'\n| where LogonType == 'RemoteInteractive'\n| summarize RDPCount = count() by AccountName, AccountDomain, DeviceName, RemoteIP\n| sort by RDPCount desc\n| take 20",
+        "size": 0,
+        "title": "Remote desktop (RDP) logons — top sessions",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "filter": true,
+          "sortBy": [{ "itemKey": "RDPCount", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "50",
+      "name": "table-rdp-logons"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔗 Cross-Layer Correlation — Users with Activity Across Multiple Layers" },
+      "name": "correlation-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let CloudRisky = SigninLogs\n| where RiskLevelDuringSignIn in ('high', 'medium')\n| summarize CloudRiskySignins = count() by UserPrincipalName;\nlet OnPremFailed = IdentityLogonEvents\n| where ActionType == 'LogonFailed'\n| summarize OnPremFailures = count() by AccountUpn;\nlet DeviceFailed = DeviceLogonEvents\n| where ActionType == 'LogonFailed'\n| summarize DeviceFailures = count() by AccountName;\nCloudRisky\n| join kind=leftouter (\n    OnPremFailed\n    | project UserPrincipalName = AccountUpn, OnPremFailures\n) on UserPrincipalName\n| join kind=leftouter (\n    DeviceFailed\n    | extend UserPrincipalName = tolower(AccountName)\n) on UserPrincipalName\n| project UserPrincipalName, CloudRiskySignins, OnPremFailures = coalesce(OnPremFailures, 0), DeviceFailures = coalesce(DeviceFailures, 0)\n| where CloudRiskySignins > 0\n| sort by CloudRiskySignins desc",
+        "size": 0,
+        "title": "Users with risk signals across cloud, on-premises, and endpoint",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "CloudRiskySignins",
+              "formatter": 4,
+              "formatOptions": { "palette": "redGreen", "max": 20 }
+            },
+            {
+              "columnMatch": "OnPremFailures",
+              "formatter": 4,
+              "formatOptions": { "palette": "redGreen", "max": 20 }
+            },
+            {
+              "columnMatch": "DeviceFailures",
+              "formatter": 4,
+              "formatOptions": { "palette": "redGreen", "max": 20 }
+            }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "CloudRiskySignins", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "100",
+      "name": "table-cross-layer"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🪟 Windows Security Events — Server Logons" },
+      "name": "securityevent-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityEvent\n| where EventID in (4624, 4625, 4648, 4768, 4769, 4771)\n| summarize\n    SuccessfulLogons = countif(EventID == 4624),\n    FailedLogons = countif(EventID == 4625),\n    ExplicitCredentials = countif(EventID == 4648),\n    KerberosRequests = countif(EventID == 4768),\n    KerberosFailures = countif(EventID == 4771)\n| project SuccessfulLogons, FailedLogons, ExplicitCredentials, KerberosRequests, KerberosFailures",
+        "size": 4,
+        "title": "Windows server logon event summary",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": { "columnMatch": "", "formatter": 1 },
+          "leftContent": {
+            "columnMatch": "SuccessfulLogons",
+            "formatter": 12,
+            "formatOptions": { "palette": "blue" }
+          }
+        }
+      },
+      "customWidth": "100",
+      "name": "kpi-securityevent"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityEvent\n| where EventID == 4625\n| summarize FailedCount = count() by TargetUserName, IpAddress, Computer\n| where FailedCount > 10\n| sort by FailedCount desc\n| take 20",
+        "size": 0,
+        "title": "Accounts with >10 failed logons on Windows servers (event 4625)",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "FailedCount",
+              "formatter": 4,
+              "formatOptions": { "palette": "redGreen", "max": 100 }
+            }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "FailedCount", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "50",
+      "name": "table-server-failures"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityEvent\n| where EventID == 4648\n| project TimeGenerated, Account, TargetUserName, TargetServerName, IpAddress, Computer\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "Explicit credential use (event 4648) — potential pass-the-hash indicator",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-explicit-creds"
+    }
+  ],
+  "styleSettings": {},
+  "fromTemplateId": "",
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

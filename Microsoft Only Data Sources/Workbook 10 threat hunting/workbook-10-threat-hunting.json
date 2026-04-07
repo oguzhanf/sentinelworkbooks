@@ -1,0 +1,324 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# 🎯 Threat Hunting Dashboard\n---\nProactive hunting queries designed to surface low-and-slow attacks that evade alerting. Focuses on rare process executions, LOLBin abuse, first-time-seen network connections, suspicious logon patterns, and encoded command detection across the MDE telemetry."
+      },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "timeRange",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "type": 4,
+            "isRequired": true,
+            "value": { "durationMs": 604800000 },
+            "typeSettings": {
+              "selectableValues": [
+                { "durationMs": 86400000 },
+                { "durationMs": 259200000 },
+                { "durationMs": 604800000 },
+                { "durationMs": 2592000000 }
+              ],
+              "allowCustom": true
+            },
+            "label": "Time Range"
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔬 Rare Process Execution" },
+      "name": "rare-process-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceProcessEvents\n| summarize ExecutionCount = count(), DeviceCount = dcount(DeviceId), Devices = make_set(DeviceName, 3) by FileName\n| where ExecutionCount < 5 and DeviceCount == 1\n| where FileName !in~ ('conhost.exe', 'WerFault.exe', 'werfault.exe', 'svchost.exe', 'RuntimeBroker.exe', 'SearchIndexer.exe')\n| sort by ExecutionCount asc\n| take 20",
+        "size": 0,
+        "title": "Processes seen fewer than 5 times on only 1 device — rare execution candidates",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "ExecutionCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 5 } }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-rare-processes"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceProcessEvents\n| where InitiatingProcessFileName in~ ('winword.exe', 'excel.exe', 'powerpnt.exe', 'outlook.exe', 'onenote.exe', 'msaccess.exe', 'mspub.exe')\n| where FileName !in~ ('splwow64.exe', 'dw20.exe', 'dwwin.exe', 'WerFault.exe')\n| project TimeGenerated, DeviceName, InitiatingProcessFileName, FileName, ProcessCommandLine, AccountName\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "Processes spawned by Office applications — macro/exploit indicator",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-office-spawned"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🛠️ LOLBin & Living-off-the-Land Abuse" },
+      "name": "lolbin-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceProcessEvents\n| where FileName in~ ('certutil.exe', 'mshta.exe', 'regsvr32.exe', 'rundll32.exe', 'wmic.exe', 'bitsadmin.exe', 'cmstp.exe', 'msiexec.exe', 'odbcconf.exe', 'regasm.exe', 'regsvcs.exe', 'installutil.exe')\n| extend SuspiciousArgs = iff(\n    ProcessCommandLine has_any ('http', 'https', 'ftp', 'decode', 'urlcache', 'transfer', 'scrobj', 'javascript', 'vbscript', '-decode', '/decode'),\n    true, false)\n| summarize ExecCount = count() by FileName, SuspiciousArgs, DeviceName\n| sort by SuspiciousArgs desc, ExecCount desc",
+        "size": 0,
+        "title": "LOLBin executions with suspicious arguments flagged",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "SuspiciousArgs",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "true", "representation": "critical", "text": "Yes" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "success", "text": "No" }
+                ]
+              }
+            },
+            { "columnMatch": "ExecCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 20 } }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-lolbin-suspicious"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceProcessEvents\n| where FileName in~ ('powershell.exe', 'pwsh.exe')\n| where ProcessCommandLine has_any ('-enc', '-encodedcommand', '-e ')\n| project TimeGenerated, DeviceName, AccountName, ProcessCommandLine, InitiatingProcessFileName\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "Encoded PowerShell executions",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-encoded-ps"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🌐 First-Time-Seen Network Connections" },
+      "name": "network-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let LookbackWindow = 30d;\nlet RecentWindow = 7d;\nlet HistoricIPs = DeviceNetworkEvents\n| where TimeGenerated between (ago(LookbackWindow) .. ago(RecentWindow))\n| where ActionType == 'ConnectionSuccess' and RemoteIPType == 'Public'\n| summarize by RemoteIP;\nDeviceNetworkEvents\n| where TimeGenerated > ago(RecentWindow)\n| where ActionType == 'ConnectionSuccess' and RemoteIPType == 'Public'\n| where RemoteIP !in (HistoricIPs)\n| summarize FirstSeen = min(TimeGenerated), DeviceCount = dcount(DeviceName), Devices = make_set(DeviceName, 3) by RemoteIP, RemotePort, InitiatingProcessFileName\n| sort by FirstSeen desc\n| take 20",
+        "size": 0,
+        "title": "New external IPs — seen in last 7 days but not in prior 30 days",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "FirstSeen", "formatter": 6 },
+            { "columnMatch": "DeviceCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 10 } }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "60",
+      "name": "table-new-ips"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceNetworkEvents\n| where ActionType == 'ConnectionSuccess'\n| where RemoteIPType == 'Public'\n| where RemotePort in (4444, 4445, 1337, 8080, 8443, 9001, 9002, 31337, 1234, 6666, 6667, 6668, 6669)\n| project TimeGenerated, DeviceName, RemoteIP, RemotePort, RemoteUrl, InitiatingProcessFileName, InitiatingProcessCommandLine\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "Connections to known C2 ports",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "40",
+      "name": "table-c2-ports"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔐 Suspicious Logon Patterns" },
+      "name": "logon-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceLogonEvents\n| where ActionType == 'LogonSuccess'\n| where LogonType == 'Network'\n| where IsLocalAdmin == true\n| summarize AdminLogonCount = count(), Devices = make_set(DeviceName, 5) by AccountName, AccountDomain\n| where AdminLogonCount > 3\n| sort by AdminLogonCount desc",
+        "size": 0,
+        "title": "Accounts with network admin logons on multiple devices — lateral movement with privilege",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "AdminLogonCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 20 } }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-admin-logons"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceLogonEvents\n| where ActionType == 'LogonFailed'\n| summarize FailCount = count(), TargetDevices = dcount(DeviceName) by AccountName, AccountDomain\n| where FailCount > 20\n| sort by FailCount desc\n| take 20",
+        "size": 0,
+        "title": "Accounts with high logon failure count — credential spray or brute force",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "FailCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 100 } }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-logon-failures"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceLogonEvents\n| where ActionType == 'LogonSuccess'\n| where LogonType == 'Network'\n| extend Hour = datetime_part('Hour', TimeGenerated)\n| where Hour between (0 .. 5)\n| project TimeGenerated, DeviceName, AccountName, AccountDomain, RemoteIP, LogonType\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "Network logons between midnight and 5am — off-hours access",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "100",
+      "name": "table-offhours-logons"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔍 Persistence & Discovery Techniques" },
+      "name": "persistence-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceProcessEvents\n| where FileName in~ ('schtasks.exe', 'at.exe')\n| where ProcessCommandLine has_any ('/create', '/change', '-create')\n| project TimeGenerated, DeviceName, AccountName, ProcessCommandLine, InitiatingProcessFileName\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "Scheduled task creation",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-schtasks"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceProcessEvents\n| where FileName in~ ('whoami.exe', 'net.exe', 'net1.exe', 'nltest.exe', 'ipconfig.exe', 'systeminfo.exe', 'quser.exe', 'tasklist.exe', 'nbtstat.exe', 'arp.exe', 'route.exe', 'netstat.exe')\n| summarize ExecCount = count() by FileName, DeviceName, AccountName\n| where ExecCount > 3\n| sort by ExecCount desc\n| take 20",
+        "size": 0,
+        "title": "Discovery command usage — recon tool execution",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "ExecCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 20 } }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-discovery"
+    }
+  ],
+  "styleSettings": {},
+  "fromTemplateId": "",
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

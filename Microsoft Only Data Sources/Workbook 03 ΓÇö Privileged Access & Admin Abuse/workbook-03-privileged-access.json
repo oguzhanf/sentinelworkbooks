@@ -1,0 +1,475 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# 👑 Privileged Access & Admin Abuse\n---\nMonitors privileged identity activity across Entra ID, Azure subscriptions, Office 365, and service principals. Detects role changes, PIM activations, anomalous admin actions, and service principal misuse."
+      },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "timeRange",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "type": 4,
+            "isRequired": true,
+            "value": { "durationMs": 604800000 },
+            "typeSettings": {
+              "selectableValues": [
+                { "durationMs": 86400000 },
+                { "durationMs": 259200000 },
+                { "durationMs": 604800000 },
+                { "durationMs": 2592000000 }
+              ],
+              "allowCustom": true
+            },
+            "label": "Time Range"
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 📊 Privileged Activity Summary" },
+      "name": "summary-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AuditLogs\n| where OperationName in ('Add member to role', 'Remove member from role', 'Add user', 'Delete user', 'Reset user password')\n| summarize SensitiveOps = count()\nby bin(TimeGenerated, 1d)\n| sort by TimeGenerated asc",
+        "size": 3,
+        "title": "Sensitive directory operations over time",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "linechart"
+      },
+      "customWidth": "50",
+      "name": "chart-dir-ops-trend"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AzureActivity\n| where CategoryValue == 'Administrative'\n| where ActivityStatusValue == 'Success'\n| summarize AzureOps = count() by bin(TimeGenerated, 1d)\n| sort by TimeGenerated asc",
+        "size": 3,
+        "title": "Azure administrative operations over time",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "linechart"
+      },
+      "customWidth": "50",
+      "name": "chart-azure-ops-trend"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔐 PIM Activations & Role Changes" },
+      "name": "pim-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AuditLogs\n| where LoggedByService == 'PIM'\n| extend InitiatedByUser = tostring(parse_json(tostring(InitiatedBy)).user.userPrincipalName)\n| extend InitiatedByApp = tostring(parse_json(tostring(InitiatedBy)).app.displayName)\n| extend Actor = iff(isnotempty(InitiatedByUser), InitiatedByUser, InitiatedByApp)\n| project TimeGenerated, OperationName, ActivityDisplayName, Actor, Result, ResultDescription\n| sort by TimeGenerated desc",
+        "size": 0,
+        "title": "PIM activations & role assignments",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Result",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "success", "representation": "success", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "error", "text": "{0}{1}" }
+                ]
+              }
+            },
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "TimeGenerated", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "60",
+      "name": "table-pim"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AuditLogs\n| where LoggedByService == 'PIM'\n| extend InitiatedByUser = tostring(parse_json(tostring(InitiatedBy)).user.userPrincipalName)\n| extend Actor = iff(isnotempty(InitiatedByUser), InitiatedByUser, 'App')\n| summarize ActivationCount = count() by Actor\n| sort by ActivationCount desc\n| take 10",
+        "size": 3,
+        "title": "Top PIM users by activation count",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart"
+      },
+      "customWidth": "40",
+      "name": "chart-pim-users"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AuditLogs\n| where OperationName in ('Add member to role', 'Remove member from role')\n| extend InitiatedByUser = tostring(parse_json(tostring(InitiatedBy)).user.userPrincipalName)\n| extend InitiatedByApp = tostring(parse_json(tostring(InitiatedBy)).app.displayName)\n| extend Actor = iff(isnotempty(InitiatedByUser), InitiatedByUser, InitiatedByApp)\n| mv-expand TargetResource = parse_json(tostring(TargetResources))\n| extend TargetUPN = tostring(TargetResource.userPrincipalName)\n| extend RoleName = tostring(TargetResource.displayName)\n| project TimeGenerated, OperationName, Actor, TargetUPN, RoleName, Result\n| sort by TimeGenerated desc",
+        "size": 0,
+        "title": "Role assignment changes — who added/removed whom from which role",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "OperationName",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "Add member to role", "representation": "critical", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "success", "text": "{0}{1}" }
+                ]
+              }
+            },
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "100",
+      "name": "table-role-changes"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## ⚙️ Service Principal Activity" },
+      "name": "sp-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AADServicePrincipalSignInLogs\n| summarize\n    TotalSignins = count(),\n    FailedSignins = countif(ResultType != '0'),\n    UniqueSPs = dcount(ServicePrincipalId),\n    UniqueResources = dcount(ResourceDisplayName)\n| project TotalSignins, FailedSignins, UniqueSPs, UniqueResources",
+        "size": 4,
+        "title": "Service principal sign-in summary",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": { "columnMatch": "", "formatter": 1 },
+          "leftContent": {
+            "columnMatch": "TotalSignins",
+            "formatter": 12,
+            "formatOptions": { "palette": "blue" }
+          }
+        }
+      },
+      "customWidth": "100",
+      "name": "kpi-sp"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AADServicePrincipalSignInLogs\n| where ResultType != '0'\n| summarize FailedCount = count() by ServicePrincipalName, IPAddress\n| sort by FailedCount desc\n| take 15",
+        "size": 0,
+        "title": "Service principals with failed sign-ins",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "FailedCount",
+              "formatter": 4,
+              "formatOptions": { "palette": "redGreen", "max": 50 }
+            }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "FailedCount", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "50",
+      "name": "table-sp-failures"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AADServicePrincipalSignInLogs\n| summarize SigninCount = count(), LastSeen = max(TimeGenerated) by ServicePrincipalName, ResourceDisplayName\n| sort by SigninCount desc\n| take 15",
+        "size": 0,
+        "title": "Most active service principals by resource accessed",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "LastSeen", "formatter": 6 },
+            {
+              "columnMatch": "SigninCount",
+              "formatter": 4,
+              "formatOptions": { "palette": "blue", "max": 1000 }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-sp-active"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AuditLogs\n| where OperationName in ('Add application', 'Add service principal', 'Add service principal credentials', 'Update application', 'Update service principal')\n| extend InitiatedByUser = tostring(parse_json(tostring(InitiatedBy)).user.userPrincipalName)\n| extend InitiatedByApp = tostring(parse_json(tostring(InitiatedBy)).app.displayName)\n| extend Actor = iff(isnotempty(InitiatedByUser), InitiatedByUser, InitiatedByApp)\n| project TimeGenerated, OperationName, Actor, Result, ResultDescription\n| sort by TimeGenerated desc",
+        "size": 0,
+        "title": "New app registrations & service principal credential changes",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Result",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "success", "representation": "success", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "error", "text": "{0}{1}" }
+                ]
+              }
+            },
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "100",
+      "name": "table-app-changes"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## ☁️ Azure Subscription Admin Actions" },
+      "name": "azure-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AzureActivity\n| where CategoryValue == 'Administrative'\n| summarize\n    TotalOps = count(),\n    SuccessOps = countif(ActivityStatusValue == 'Success'),\n    FailedOps = countif(ActivityStatusValue == 'Failed'),\n    UniqueCallers = dcount(Caller)\n| project TotalOps, SuccessOps, FailedOps, UniqueCallers",
+        "size": 4,
+        "title": "Azure administrative operations summary",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": { "columnMatch": "", "formatter": 1 },
+          "leftContent": {
+            "columnMatch": "TotalOps",
+            "formatter": 12,
+            "formatOptions": { "palette": "blue" }
+          }
+        }
+      },
+      "customWidth": "100",
+      "name": "kpi-azure"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AzureActivity\n| where CategoryValue == 'Administrative'\n| where OperationNameValue has_any ('roleAssignment', 'policyAssignment', 'delete', 'write')\n| where ActivityStatusValue == 'Success'\n| project TimeGenerated, Caller, CallerIpAddress, OperationNameValue, ResourceGroup, ResourceProviderValue, ActivityStatusValue\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "Sensitive Azure operations — role assignments, policy, deletes",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "TimeGenerated", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "60",
+      "name": "table-azure-sensitive"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AzureActivity\n| where CategoryValue == 'Administrative'\n| where ActivityStatusValue == 'Success'\n| summarize OpCount = count() by Caller\n| where isnotempty(Caller)\n| sort by OpCount desc\n| take 10",
+        "size": 3,
+        "title": "Top Azure admin actors",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart"
+      },
+      "customWidth": "40",
+      "name": "chart-azure-callers"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 📧 Office 365 Admin & Privileged Operations" },
+      "name": "office-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "OfficeActivity\n| where Operation in~ (\n    'New-TransportRule',\n    'Set-TransportRule',\n    'New-InboxRule',\n    'Set-InboxRule',\n    'Add-MailboxPermission',\n    'Set-Mailbox',\n    'Add-RecipientPermission',\n    'Set-AdminAuditLogConfig',\n    'Set-OrganizationConfig',\n    'Disable-OrganizationCustomization'\n)\n| project TimeGenerated, UserId, Operation, OfficeWorkload, Parameters, ResultStatus, ClientIP\n| sort by TimeGenerated desc",
+        "size": 0,
+        "title": "Sensitive Exchange/Office admin operations",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "ResultStatus",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "True", "representation": "success", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "error", "text": "{0}{1}" }
+                ]
+              }
+            },
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "100",
+      "name": "table-exchange-admin"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "OfficeActivity\n| where Operation in~ ('Add-MailboxPermission', 'Add-RecipientPermission')\n| project TimeGenerated, UserId, Operation, OfficeObjectId, Parameters, ClientIP\n| sort by TimeGenerated desc",
+        "size": 0,
+        "title": "Mailbox delegation changes",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-mailbox-delegation"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "OfficeActivity\n| where Operation in~ ('New-TransportRule', 'Set-TransportRule', 'New-InboxRule', 'Set-InboxRule')\n| project TimeGenerated, UserId, Operation, OfficeObjectId, Parameters, ClientIP\n| sort by TimeGenerated desc",
+        "size": 0,
+        "title": "Mail flow rule changes — potential exfil setup",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-transport-rules"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔗 Cross-Layer Admin Correlation" },
+      "name": "correlation-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let EntraAdmins = AuditLogs\n| where OperationName in ('Add member to role', 'Remove member from role')\n| extend Actor = tostring(parse_json(tostring(InitiatedBy)).user.userPrincipalName)\n| where isnotempty(Actor)\n| summarize EntraRoleChanges = count() by Actor;\nlet AzureAdmins = AzureActivity\n| where CategoryValue == 'Administrative'\n| where ActivityStatusValue == 'Success'\n| where Caller has '@'\n| summarize AzureOps = count() by Actor = Caller;\nlet OfficeAdmins = OfficeActivity\n| where Operation in~ ('New-TransportRule', 'Set-TransportRule', 'New-InboxRule', 'Set-InboxRule', 'Add-MailboxPermission')\n| summarize OfficeOps = count() by Actor = UserId;\nEntraAdmins\n| join kind=leftouter AzureAdmins on Actor\n| join kind=leftouter OfficeAdmins on Actor\n| project Actor, EntraRoleChanges, AzureOps = coalesce(AzureOps, 0), OfficeOps = coalesce(OfficeOps, 0)\n| extend TotalActions = EntraRoleChanges + AzureOps + OfficeOps\n| sort by TotalActions desc",
+        "size": 0,
+        "title": "Admins active across multiple layers — Entra, Azure, and Office 365",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "TotalActions",
+              "formatter": 4,
+              "formatOptions": { "palette": "blue", "max": 50 }
+            },
+            {
+              "columnMatch": "EntraRoleChanges",
+              "formatter": 4,
+              "formatOptions": { "palette": "redGreen", "max": 20 }
+            }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "TotalActions", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "100",
+      "name": "table-cross-admin"
+    }
+  ],
+  "styleSettings": {},
+  "fromTemplateId": "",
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

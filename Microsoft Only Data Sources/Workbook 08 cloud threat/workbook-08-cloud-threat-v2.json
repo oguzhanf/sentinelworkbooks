@@ -1,0 +1,343 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# ☁️ Cloud Threat & Azure Anomaly\n---\nMonitors Azure control plane activity, service principal sign-ins, and privileged Entra operations for anomalies, misconfigurations, and attack patterns. Surfaces high-risk Azure resource changes, suspicious service principal usage, and unusual administrative activity."
+      },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "timeRange",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "type": 4,
+            "isRequired": true,
+            "value": { "durationMs": 604800000 },
+            "typeSettings": {
+              "selectableValues": [
+                { "durationMs": 86400000 },
+                { "durationMs": 259200000 },
+                { "durationMs": 604800000 },
+                { "durationMs": 2592000000 }
+              ],
+              "allowCustom": true
+            },
+            "label": "Time Range"
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 📊 Azure Activity Overview" },
+      "name": "overview-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AzureActivity\n| summarize\n    TotalOperations = count(),\n    FailedOperations = countif(ActivityStatusValue == 'Failure'),\n    WriteOperations = countif(ActivityStatusValue == 'Success' and OperationNameValue has_any ('write', 'create', 'delete', 'update')),\n    UniqueCallers = dcount(Caller),\n    UniqueSubscriptions = dcount(SubscriptionId)\n| project TotalOperations, FailedOperations, WriteOperations, UniqueCallers, UniqueSubscriptions",
+        "size": 4,
+        "title": "Azure activity summary",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": { "columnMatch": "", "formatter": 1 },
+          "leftContent": { "columnMatch": "TotalOperations", "formatter": 12, "formatOptions": { "palette": "blue" } }
+        }
+      },
+      "customWidth": "100",
+      "name": "kpi-azure"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AzureActivity\n| summarize OperationCount = count() by CategoryValue, ActivityStatusValue\n| sort by OperationCount desc",
+        "size": 3,
+        "title": "Operations by category and status",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart",
+        "chartSettings": { "showLegend": true }
+      },
+      "customWidth": "50",
+      "name": "chart-category"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AzureActivity\n| where ActivityStatusValue == 'Failure'\n| summarize FailCount = count() by Caller, OperationNameValue\n| sort by FailCount desc\n| take 15",
+        "size": 0,
+        "title": "Top failing operations by caller",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "FailCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 50 } }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-failing-ops"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔴 High-Risk Azure Operations" },
+      "name": "highrisk-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AzureActivity\n| where ActivityStatusValue == 'Success'\n| where OperationNameValue has_any (\n    'Microsoft.Authorization/roleAssignments/write',\n    'Microsoft.Authorization/roleDefinitions/write',\n    'Microsoft.Authorization/policyAssignments/write',\n    'Microsoft.KeyVault/vaults/write',\n    'Microsoft.KeyVault/vaults/delete',\n    'Microsoft.KeyVault/vaults/secrets/write',\n    'Microsoft.Network/networkSecurityGroups/write',\n    'Microsoft.Network/networkSecurityGroups/securityRules/write',\n    'Microsoft.Compute/virtualMachines/runCommand/action',\n    'Microsoft.Storage/storageAccounts/write'\n)\n| project TimeGenerated, Caller, CallerIpAddress, OperationNameValue, ResourceGroup, _ResourceId, ActivityStatusValue\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "High-risk write operations — RBAC, Key Vault, NSG, VM run command",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "TimeGenerated", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "100",
+      "name": "table-highrisk-ops"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AzureActivity\n| where ActivityStatusValue == 'Success'\n| where OperationNameValue has_any ('delete', 'Delete')\n| project TimeGenerated, Caller, CallerIpAddress, OperationNameValue, ResourceGroup, _ResourceId\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "Resource deletion events",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-deletions"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AzureActivity\n| where ActivityStatusValue == 'Success'\n| where Caller !endswith '@zava-corp.com'\n| where isnotempty(Caller)\n| where Caller !has 'Microsoft'\n| summarize OperationCount = count(), Operations = make_set(OperationNameValue, 5) by Caller, CallerIpAddress\n| sort by OperationCount desc\n| take 20",
+        "size": 0,
+        "title": "Operations by external or service callers",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "OperationCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 100 } }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-external-callers"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🤖 Service Principal Activity" },
+      "name": "sp-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AADServicePrincipalSignInLogs\n| summarize\n    TotalSignIns = count(),\n    FailedSignIns = countif(ResultType != '0'),\n    UniqueApps = dcount(AppId),\n    UniqueResources = dcount(ResourceDisplayName)\n| project TotalSignIns, FailedSignIns, UniqueApps, UniqueResources",
+        "size": 4,
+        "title": "Service principal sign-in summary",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": { "columnMatch": "", "formatter": 1 },
+          "leftContent": { "columnMatch": "TotalSignIns", "formatter": 12, "formatOptions": { "palette": "blue" } }
+        }
+      },
+      "customWidth": "100",
+      "name": "kpi-sp"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AADServicePrincipalSignInLogs\n| where ResultType != '0'\n| summarize FailCount = count() by ServicePrincipalName, AppId, ResourceDisplayName\n| sort by FailCount desc\n| take 15",
+        "size": 0,
+        "title": "Service principals with failed sign-ins",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "FailCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 50 } }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "FailCount", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "50",
+      "name": "table-sp-failures"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AADServicePrincipalSignInLogs\n| where ResultType == '0'\n| summarize SignInCount = count(), Resources = make_set(ResourceDisplayName, 5) by ServicePrincipalName, AppId\n| sort by SignInCount desc\n| take 15",
+        "size": 0,
+        "title": "Most active service principals",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "SignInCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 500 } }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "table-active-sps"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔐 Entra ID — Privileged Operations" },
+      "name": "entra-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AuditLogs\n| where OperationName in (\n    'Add member to role',\n    'Remove member from role',\n    'Add application',\n    'Delete application',\n    'Add service principal',\n    'Delete service principal',\n    'Add app role assignment to service principal',\n    'Set federation settings on domain',\n    'Set domain authentication'\n)\n| extend InitiatedByUPN = tostring(parse_json(tostring(InitiatedBy)).user.userPrincipalName)\n| extend InitiatedBySP = tostring(parse_json(tostring(InitiatedBy)).app.displayName)\n| extend Actor = iff(isnotempty(InitiatedByUPN), InitiatedByUPN, InitiatedBySP)\n| project TimeGenerated, OperationName, Actor, Result, TargetResources\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "High-risk Entra operations — role assignments, app registrations, federation changes",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 }
+          ],
+          "filter": true,
+          "sortBy": [{ "itemKey": "TimeGenerated", "sortOrder": 2 }]
+        }
+      },
+      "customWidth": "100",
+      "name": "table-entra-highrisk"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "AuditLogs\n| where OperationName in ('Add member to role', 'Remove member from role')\n| extend InitiatedByUPN = tostring(parse_json(tostring(InitiatedBy)).user.userPrincipalName)\n| extend TargetUPN = tostring(parse_json(tostring(TargetResources))[0].userPrincipalName)\n| extend RoleName = tostring(parse_json(tostring(TargetResources))[0].displayName)\n| project TimeGenerated, OperationName, InitiatedByUPN, TargetUPN, RoleName, Result\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "Directory role membership changes",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "TimeGenerated", "formatter": 6 },
+            {
+              "columnMatch": "OperationName",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "Add member to role", "representation": "critical", "text": "{0}{1}" },
+                  { "operator": "Default", "thresholdValue": null, "representation": "success", "text": "{0}{1}" }
+                ]
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "100",
+      "name": "table-role-changes"
+    },
+    {
+      "type": 1,
+      "content": { "json": "## 🔗 Cross-Layer: Azure Anomalies with Active Alerts" },
+      "name": "correlation-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let AzureCallers = AzureActivity\n| where ActivityStatusValue == 'Success'\n| where OperationNameValue has_any ('write', 'delete', 'action')\n| summarize AzureOpCount = count(), LastAzureOp = max(TimeGenerated) by Caller = tolower(Caller);\nlet AlertedUsers = SecurityAlert\n| where isnotempty(CompromisedEntity)\n| summarize AlertCount = count(), AlertSeverity = max(AlertSeverity) by Caller = tolower(CompromisedEntity);\nAzureCallers\n| join kind=leftouter AlertedUsers on Caller\n| project Caller, AzureOpCount, LastAzureOp, AlertCount = coalesce(AlertCount, 0), AlertSeverity = coalesce(AlertSeverity, 'None')\n| sort by AlertCount desc, AzureOpCount desc\n| take 20",
+        "size": 0,
+        "title": "Azure callers who also have active security alerts — potential compromised admin",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "LastAzureOp", "formatter": 6 },
+            { "columnMatch": "AzureOpCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 100 } },
+            { "columnMatch": "AlertCount", "formatter": 4, "formatOptions": { "palette": "redGreen", "max": 20 } }
+          ],
+          "filter": true
+        }
+      },
+      "customWidth": "100",
+      "name": "table-correlation"
+    }
+  ],
+  "styleSettings": {},
+  "fromTemplateId": "",
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}
