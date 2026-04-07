@@ -6,6 +6,42 @@ A curated set of **20 Azure Sentinel workbooks** designed for SOC analysts and s
 
 ---
 
+## Deploy to Azure
+
+Click any button below to deploy a workbook directly to your Sentinel workspace.
+
+### Gov Dashboards
+
+| Workbook | Deploy |
+|----------|--------|
+| Perimeter Breach Detection | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FGov%20Dashboards%2Fdeployments%2Fgov-wb01-perimeter-breach-deploy.json) |
+| Identity-to-Network Kill Chain | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FGov%20Dashboards%2Fdeployments%2Fgov-wb02-identity-network-deploy.json) |
+| Data Exfiltration Across Layers | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FGov%20Dashboards%2Fdeployments%2Fgov-wb03-exfiltration-deploy.json) |
+| Lateral Movement & Reconnaissance | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FGov%20Dashboards%2Fdeployments%2Fgov-wb04-lateral-movement-deploy.json) |
+| Web Application Attack Chain | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FGov%20Dashboards%2Fdeployments%2Fgov-wb05-web-attack-chain-deploy.json) |
+| Infrastructure Availability vs Security | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FGov%20Dashboards%2Fdeployments%2Fgov-wb06-availability-security-deploy.json) |
+| Privileged Account Abuse | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FGov%20Dashboards%2Fdeployments%2Fgov-wb07-privileged-abuse-deploy.json) |
+| DNS as an Attack Vector | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FGov%20Dashboards%2Fdeployments%2Fgov-wb08-dns-attack-deploy.json) |
+| Cloud & Hybrid Threat Correlation | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FGov%20Dashboards%2Fdeployments%2Fgov-wb09-cloud-hybrid-deploy.json) |
+| SOC Health & Coverage | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FGov%20Dashboards%2Fdeployments%2Fgov-wb10-soc-health-deploy.json) |
+
+### Microsoft Only Data Sources
+
+| Workbook | Deploy |
+|----------|--------|
+| Unified Security Posture | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FMicrosoft%20Only%20Data%20Sources%2Fdeployments%2Fworkbook-01-deploy.json) |
+| Identity Attack Chain | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FMicrosoft%20Only%20Data%20Sources%2Fdeployments%2Fworkbook-02-deploy.json) |
+| Privileged Access & Admin Abuse | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FMicrosoft%20Only%20Data%20Sources%2Fdeployments%2Fworkbook-03-deploy.json) |
+| Endpoint Compromise & Lateral Movement | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FMicrosoft%20Only%20Data%20Sources%2Fdeployments%2Fworkbook-04-deploy.json) |
+| Endpoint Health & Coverage | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FMicrosoft%20Only%20Data%20Sources%2Fdeployments%2Fworkbook-05-deploy.json) |
+| Phishing to Compromise Chain | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FMicrosoft%20Only%20Data%20Sources%2Fdeployments%2Fworkbook-06-deploy.json) |
+| Data Exfiltration & Insider Risk | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FMicrosoft%20Only%20Data%20Sources%2Fdeployments%2Fworkbook-07-deploy.json) |
+| Cloud Threat & Azure Anomaly | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FMicrosoft%20Only%20Data%20Sources%2Fdeployments%2Fworkbook-08-deploy.json) |
+| SOC Incident Investigation Helper | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FMicrosoft%20Only%20Data%20Sources%2Fdeployments%2Fworkbook-09-deploy.json) |
+| Threat Hunting Dashboard | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Foguzhanf%2Fsentinelworkbooks%2Fmaster%2FMicrosoft%20Only%20Data%20Sources%2Fdeployments%2Fworkbook-10-deploy.json) |
+
+---
+
 ## Repository Structure
 
 ```
