@@ -1,5 +1,7 @@
 # Microsoft Sentinel Workbooks Collection
 
+**Author:** Omar Al Homaidi
+
 A curated set of **20 Azure Sentinel workbooks** designed for SOC analysts and security teams. The collection is split into two categories: multi-vendor government/enterprise dashboards and Microsoft-native detection workbooks.
 
 ---
